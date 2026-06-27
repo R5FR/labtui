@@ -20,9 +20,15 @@ labtui adds a native **Merge Requests** tab that talks to the GitLab API directl
 
 - **GitLab integration:**
   - Merge Request list tab (opened, draft, merged, closed)
+  - Issues tab — list open issues, create (`n`) and close (`c`) them
   - Pipeline status badge per MR
   - Token stored securely in the system keyring
   - Auto-detected from the git remote URL — no config needed if the remote is GitLab
+
+  The underlying `asyncgitlab` crate also covers MR actions (merge / approve /
+  rebase / comment), issue & MR notes, and pipelines/jobs (list / trace /
+  retry / cancel); see [`asyncgitlab/ROADMAP.md`](asyncgitlab/ROADMAP.md) for
+  what is exposed in the UI today.
 
 ## Build
 
@@ -40,7 +46,7 @@ The binary is at `target/release/labtui`.
 
 ## GitLab setup
 
-labtui auto-detects GitLab remotes from your repo's remote URL. On first launch in a GitLab repo, it will prompt you to enter a **personal access token** with `read_api` scope. The token is then stored in the system keyring.
+labtui auto-detects GitLab remotes from your repo's remote URL. On first launch in a GitLab repo, it will prompt you to enter a **personal access token**. Use the `api` scope if you want the write actions (creating/closing issues, MR actions); `read_api` is enough for read-only browsing. The token is then stored in the system keyring.
 
 You can also set the token via environment variable:
 
@@ -54,7 +60,7 @@ export GITLAB_TOKEN=your_token
 labtui
 ```
 
-Use the `Tab` / `Shift+Tab` keys to navigate between tabs. The **Merge Requests** tab appears automatically when a GitLab remote is detected.
+Use the `Tab` / `Shift+Tab` keys (or the number keys) to navigate between tabs. The **Merge Requests** (`6`) and **Issues** (`7`) tabs appear automatically when a GitLab remote is detected. In the Issues tab, press `n` to create an issue, `c` to close the selected one, and `r` to refresh.
 
 ## Key Bindings
 

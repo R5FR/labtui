@@ -29,8 +29,8 @@ use crate::{
 	setup_popups,
 	strings::{self, ellipsis_trim_start, order},
 	tabs::{
-		FilesTab, MergeRequestsTab, Revlog, StashList, Stashing,
-		Status,
+		FilesTab, IssuesTab, MergeRequestsTab, Revlog, StashList,
+		Stashing, Status,
 	},
 	try_or_popup,
 	ui::style::{SharedTheme, Theme},
@@ -111,6 +111,7 @@ pub struct App {
 	stashlist_tab: StashList,
 	files_tab: FilesTab,
 	merge_requests_tab: MergeRequestsTab,
+	issues_tab: IssuesTab,
 	queue: Queue,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
@@ -245,6 +246,7 @@ impl App {
 			stashlist_tab: StashList::new(&env),
 			files_tab: FilesTab::new(&env, select_file),
 			merge_requests_tab: MergeRequestsTab::new(&env),
+			issues_tab: IssuesTab::new(&env),
 			checkout_option_popup: CheckoutOptionPopup::new(&env),
 			goto_line_popup: GotoLinePopup::new(&env),
 			tab: 0,
@@ -306,6 +308,9 @@ impl App {
 				5 => {
 					self.merge_requests_tab.draw(f, chunks_main[1])?;
 				}
+				6 => {
+					self.issues_tab.draw(f, chunks_main[1])?;
+				}
 				_ => bail!("unknown tab"),
 			}
 		}
@@ -361,6 +366,9 @@ impl App {
 				) || key_match(
 					k,
 					self.key_config.keys.tab_merge_requests,
+				) || key_match(
+					k,
+					self.key_config.keys.tab_issues,
 				) {
 					self.switch_tab(k)?;
 					NeedsUpdate::COMMANDS
@@ -426,6 +434,7 @@ impl App {
 		self.stashing_tab.update()?;
 		self.stashlist_tab.update()?;
 		self.merge_requests_tab.update();
+		self.issues_tab.update();
 		self.reset_popup.update()?;
 
 		self.update_commands();
@@ -456,6 +465,7 @@ impl App {
 
 		if let AsyncNotification::GitLab(ev) = ev {
 			self.merge_requests_tab.update_gitlab(ev);
+			self.issues_tab.update_gitlab(ev);
 		}
 
 		self.files_tab.update_async(ev)?;
@@ -499,6 +509,7 @@ impl App {
 			|| self.revision_files_popup.any_work_pending()
 			|| self.tags_popup.any_work_pending()
 			|| self.merge_requests_tab.any_work_pending()
+			|| self.issues_tab.any_work_pending()
 	}
 
 	///
@@ -553,7 +564,8 @@ impl App {
 			files_tab,
 			stashing_tab,
 			stashlist_tab,
-			merge_requests_tab
+			merge_requests_tab,
+			issues_tab
 		]
 	);
 
@@ -597,6 +609,7 @@ impl App {
 	fn check_quit(&mut self, ev: &Event) -> bool {
 		if self.any_popup_visible()
 			|| self.merge_requests_tab.is_editing()
+			|| self.issues_tab.is_editing()
 		{
 			return false;
 		}
@@ -627,6 +640,7 @@ impl App {
 			&mut self.stashing_tab,
 			&mut self.stashlist_tab,
 			&mut self.merge_requests_tab,
+			&mut self.issues_tab,
 		]
 	}
 
@@ -657,6 +671,8 @@ impl App {
 			self.key_config.keys.tab_merge_requests,
 		) {
 			self.switch_to_tab(&AppTabs::MergeRequests)?;
+		} else if key_match(k, self.key_config.keys.tab_issues) {
+			self.switch_to_tab(&AppTabs::Issues)?;
 		}
 
 		Ok(())
@@ -686,6 +702,7 @@ impl App {
 			AppTabs::Stashing => self.set_tab(3)?,
 			AppTabs::Stashlist => self.set_tab(4)?,
 			AppTabs::MergeRequests => self.set_tab(5)?,
+			AppTabs::Issues => self.set_tab(6)?,
 		}
 		Ok(())
 	}
@@ -1206,6 +1223,7 @@ impl App {
 			Span::raw(strings::tab_stashing(&self.key_config)),
 			Span::raw(strings::tab_stashes(&self.key_config)),
 			Span::raw(strings::tab_merge_requests(&self.key_config)),
+			Span::raw(strings::tab_issues(&self.key_config)),
 		];
 		let divider = strings::tab_divider(&self.key_config);
 

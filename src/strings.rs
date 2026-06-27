@@ -99,6 +99,12 @@ pub fn tab_merge_requests(
 		key_config.get_hint(key_config.keys.tab_merge_requests)
 	)
 }
+pub fn tab_issues(key_config: &SharedKeyConfig) -> String {
+	format!(
+		"Issues [{}]",
+		key_config.get_hint(key_config.keys.tab_issues)
+	)
+}
 pub fn tab_divider(_key_config: &SharedKeyConfig) -> String {
 	" | ".to_string()
 }
@@ -549,6 +555,7 @@ pub mod commands {
 	static CMD_GROUP_STASHES: &str = "-- Stashes --";
 	static CMD_GROUP_LOG: &str = "-- Log --";
 	static CMD_GROUP_BRANCHES: &str = "-- Branches --";
+	static CMD_GROUP_GITLAB: &str = "-- GitLab --";
 
 	pub fn toggle_tabs(key_config: &SharedKeyConfig) -> CommandText {
 		CommandText::new(
@@ -655,6 +662,20 @@ pub mod commands {
 			),
 			"scroll up or down in focused view",
 			CMD_GROUP_GENERAL,
+		)
+	}
+	pub fn issue_new(_key_config: &SharedKeyConfig) -> CommandText {
+		CommandText::new(
+			"New issue [n]".to_string(),
+			"create a new GitLab issue",
+			CMD_GROUP_GITLAB,
+		)
+	}
+	pub fn issue_close(_key_config: &SharedKeyConfig) -> CommandText {
+		CommandText::new(
+			"Close [c]".to_string(),
+			"close the selected GitLab issue",
+			CMD_GROUP_GITLAB,
 		)
 	}
 	pub fn commit_list_mark(

@@ -14,19 +14,19 @@ use asyncgit::{
 	sync::{get_default_remote, get_remote_url, RepoPathRef},
 };
 use asyncgitlab::{
-	has_token, store_token, AsyncGitLabNotification,
-	AsyncMergeRequestsJob, GitLabRemote, MergeRequest,
-	MergeRequestScope, MergeRequestState,
+	has_token, store_token, AsyncActionJob, AsyncGitLabNotification,
+	AsyncIssuesJob, GitLabAction, GitLabRemote, Issue, IssueScope,
+	IssueState, StateEvent,
 };
-use crossterm::event::Event;
+use crossterm::event::{Event, KeyCode};
 use ratatui::{
-	layout::{Alignment, Rect},
+	layout::{Alignment, Constraint, Direction, Layout, Rect},
 	text::{Line, Span},
 	widgets::{Block, Borders, List, ListItem, Paragraph},
 	Frame,
 };
 
-/// Loading state of the merge request list.
+/// Loading state of the issue list.
 enum LoadState {
 	/// no GitLab remote could be detected for this repo
 	NoRemote,
@@ -34,24 +34,28 @@ enum LoadState {
 	NeedToken,
 	/// request in flight, nothing loaded yet
 	Loading,
-	/// loaded merge requests (possibly empty)
-	Loaded(Vec<MergeRequest>),
+	/// loaded issues (possibly empty)
+	Loaded(Vec<Issue>),
 	/// request failed
 	Error(String),
 }
 
-pub struct MergeRequestsTab {
+pub struct IssuesTab {
 	visible: bool,
 	remote: Option<GitLabRemote>,
 	state: LoadState,
 	selection: usize,
-	async_mrs: AsyncSingleJob<AsyncMergeRequestsJob>,
+	/// transient one-line feedback after a write action
+	status_msg: Option<String>,
+	async_issues: AsyncSingleJob<AsyncIssuesJob>,
+	async_action: AsyncSingleJob<AsyncActionJob>,
 	token_input: TextInputComponent,
+	new_issue_input: TextInputComponent,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
 }
 
-impl MergeRequestsTab {
+impl IssuesTab {
 	pub fn new(env: &Environment) -> Self {
 		let remote = detect_gitlab_remote(&env.repo);
 
@@ -64,18 +68,32 @@ impl MergeRequestsTab {
 		let token_input = TextInputComponent::new(
 			env,
 			"GitLab token",
-			"paste a token with read_api scope, then press [Enter]",
+			"paste a token with api scope, then press [Enter]",
 			false,
 		)
 		.with_input_type(InputType::Password);
+
+		let new_issue_input = TextInputComponent::new(
+			env,
+			"New issue",
+			"issue title, then press [Enter]",
+			false,
+		);
 
 		Self {
 			visible: false,
 			state,
 			remote,
 			selection: 0,
-			async_mrs: AsyncSingleJob::new(env.sender_gitlab.clone()),
+			status_msg: None,
+			async_issues: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
+			async_action: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
 			token_input,
+			new_issue_input,
 			theme: env.theme.clone(),
 			key_config: env.key_config.clone(),
 		}
@@ -98,18 +116,34 @@ impl MergeRequestsTab {
 			if self.token_input.is_visible() {
 				self.token_input.hide();
 			}
-			if !self.async_mrs.is_pending() {
+			if !self.async_issues.is_pending()
+				&& !self.async_action.is_pending()
+			{
 				if matches!(self.state, LoadState::NeedToken) {
 					self.state = LoadState::Loading;
 				}
-				self.async_mrs.spawn(AsyncMergeRequestsJob::new(
+				self.async_issues.spawn(AsyncIssuesJob::new(
 					remote,
-					MergeRequestScope::Opened,
+					IssueScope::Opened,
 				));
 			}
 		} else {
 			self.state = LoadState::NeedToken;
 			self.show_token_prompt();
+		}
+	}
+
+	/// Force a reload of the issue list.
+	fn reload(&self) {
+		if let Some(remote) = self.remote.clone() {
+			if has_token(&remote.host)
+				&& !self.async_issues.is_pending()
+			{
+				self.async_issues.spawn(AsyncIssuesJob::new(
+					remote,
+					IssueScope::Opened,
+				));
+			}
 		}
 	}
 
@@ -120,9 +154,10 @@ impl MergeRequestsTab {
 		}
 	}
 
-	/// True while the user is entering a token (used to block global quit).
+	/// True while the user is entering text (used to block global quit).
 	pub fn is_editing(&self) -> bool {
 		self.token_input.is_visible()
+			|| self.new_issue_input.is_visible()
 	}
 
 	/// Persist the typed token to the OS keyring, then start loading.
@@ -154,34 +189,94 @@ impl MergeRequestsTab {
 		}
 	}
 
+	fn show_new_issue_prompt(&mut self) {
+		if !self.new_issue_input.is_visible() {
+			self.new_issue_input.clear();
+			let _ = self.new_issue_input.show();
+		}
+	}
+
+	/// Spawn a "create issue" action with the typed title.
+	fn submit_new_issue(&mut self) {
+		let title = self.new_issue_input.get_text().trim().to_string();
+		self.new_issue_input.clear();
+		self.new_issue_input.hide();
+		if title.is_empty() {
+			return;
+		}
+		self.spawn_action(GitLabAction::CreateIssue {
+			title,
+			description: None,
+		});
+	}
+
+	/// Close the currently selected issue.
+	fn close_selected(&mut self) {
+		let Some(iid) = self.selected_issue().map(|i| i.iid) else {
+			return;
+		};
+		self.spawn_action(GitLabAction::SetIssueState {
+			iid,
+			event: StateEvent::Close,
+		});
+	}
+
+	fn spawn_action(&mut self, action: GitLabAction) {
+		let Some(remote) = self.remote.clone() else {
+			return;
+		};
+		if self.async_action.is_pending() {
+			return;
+		}
+		self.status_msg = Some("working…".to_string());
+		self.async_action
+			.spawn(AsyncActionJob::new(remote, action));
+	}
+
 	/// handle a finished GitLab job
 	pub fn update_gitlab(&mut self, ev: AsyncGitLabNotification) {
 		match ev {
-			AsyncGitLabNotification::MergeRequests => {
-				if let Some(job) = self.async_mrs.take_last() {
+			AsyncGitLabNotification::Issues => {
+				if let Some(job) = self.async_issues.take_last() {
 					if let Some(result) = job.result() {
 						self.state = match result {
-							Ok(mrs) => LoadState::Loaded(mrs),
+							Ok(issues) => LoadState::Loaded(issues),
 							Err(e) => LoadState::Error(e),
 						};
 						self.clamp_selection();
 					}
 				}
 			}
-			AsyncGitLabNotification::Issues
-			| AsyncGitLabNotification::Action => {}
+			AsyncGitLabNotification::Action => {
+				if let Some(job) = self.async_action.take_last() {
+					if let Some(result) = job.result() {
+						self.status_msg = Some(match result {
+							Ok(msg) => msg,
+							Err(e) => format!("error: {e}"),
+						});
+						// reflect the change in the list
+						self.reload();
+					}
+				}
+			}
+			AsyncGitLabNotification::MergeRequests => {}
 		}
 	}
 
 	pub fn any_work_pending(&self) -> bool {
-		self.async_mrs.is_pending()
+		self.async_issues.is_pending()
+			|| self.async_action.is_pending()
 	}
 
-	fn loaded(&self) -> Option<&[MergeRequest]> {
+	fn loaded(&self) -> Option<&[Issue]> {
 		match &self.state {
-			LoadState::Loaded(mrs) => Some(mrs),
+			LoadState::Loaded(issues) => Some(issues),
 			_ => None,
 		}
+	}
+
+	fn selected_issue(&self) -> Option<&Issue> {
+		self.loaded().and_then(|i| i.get(self.selection))
 	}
 
 	fn clamp_selection(&mut self) {
@@ -219,8 +314,8 @@ impl MergeRequestsTab {
 
 	fn title(&self) -> String {
 		self.remote.as_ref().map_or_else(
-			|| "Merge Requests".to_string(),
-			|r| format!("Merge Requests · {}", r.project_path),
+			|| "Issues".to_string(),
+			|r| format!("Issues · {}", r.project_path),
 		)
 	}
 
@@ -228,31 +323,51 @@ impl MergeRequestsTab {
 		self.remote.as_ref().map_or("", |r| r.host.as_str())
 	}
 
-	fn render_list(&self, f: &mut Frame, rect: Rect, mrs: &[MergeRequest]) {
-		let items: Vec<ListItem> = mrs
+	fn render_list(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		issues: &[Issue],
+	) {
+		// split off a one-line footer for transient action feedback
+		let (list_area, footer) = self.status_msg.as_deref().map_or(
+			(rect, None),
+			|msg| {
+				let chunks = Layout::default()
+					.direction(Direction::Vertical)
+					.constraints([
+						Constraint::Min(1),
+						Constraint::Length(1),
+					])
+					.split(rect);
+				(chunks[0], Some((chunks[1], msg)))
+			},
+		);
+
+		let items: Vec<ListItem> = issues
 			.iter()
 			.enumerate()
-			.map(|(i, mr)| {
+			.map(|(i, issue)| {
 				let selected = i == self.selection;
-				let marker = match mr.state {
-					MergeRequestState::Merged => "✓",
-					MergeRequestState::Closed => "✗",
-					_ if mr.draft => "◐",
+				let marker = match issue.state {
+					IssueState::Closed => "✗",
 					_ => "●",
 				};
-				let author = mr
+				let author = issue
 					.author
 					.as_ref()
 					.map_or_else(String::new, |a| {
 						format!(" @{}", a.username)
 					});
+				let comments = if issue.user_notes_count > 0 {
+					format!("  💬{}", issue.user_notes_count)
+				} else {
+					String::new()
+				};
 				let line = Line::from(vec![Span::styled(
 					format!(
-						"{marker} !{}  {}  ({} → {}){author}",
-						mr.iid,
-						mr.title,
-						mr.source_branch,
-						mr.target_branch,
+						"{marker} #{}  {}{author}{comments}",
+						issue.iid, issue.title,
 					),
 					self.theme.text(true, selected),
 				)]);
@@ -265,11 +380,17 @@ impl MergeRequestsTab {
 				.borders(Borders::ALL)
 				.title(self.title()),
 		);
-		f.render_widget(list, rect);
+		f.render_widget(list, list_area);
+
+		if let Some((rect, msg)) = footer {
+			let p = Paragraph::new(msg)
+				.style(self.theme.text(true, false));
+			f.render_widget(p, rect);
+		}
 	}
 }
 
-impl DrawableComponent for MergeRequestsTab {
+impl DrawableComponent for IssuesTab {
 	fn draw(&self, f: &mut Frame, rect: Rect) -> Result<()> {
 		match &self.state {
 			LoadState::NoRemote => self.draw_message(
@@ -279,7 +400,6 @@ impl DrawableComponent for MergeRequestsTab {
 			),
 			LoadState::NeedToken => {
 				if self.token_input.is_visible() {
-					// underlying message + centered input popup on top
 					self.draw_message(
 						f,
 						rect,
@@ -301,26 +421,37 @@ impl DrawableComponent for MergeRequestsTab {
 				}
 			}
 			LoadState::Loading => {
-				self.draw_message(f, rect, "Loading merge requests…");
+				self.draw_message(f, rect, "Loading issues…");
 			}
 			LoadState::Error(e) => self.draw_message(
 				f,
 				rect,
 				&format!(
-					"Failed to load merge requests:\n{e}\n\nPress [Enter] to re-enter the token."
+					"Failed to load issues:\n{e}\n\nPress [Enter] to re-enter the token."
 				),
 			),
-			LoadState::Loaded(mrs) if mrs.is_empty() => {
-				self.draw_message(f, rect, "No open merge requests.");
+			LoadState::Loaded(issues) if issues.is_empty() => {
+				self.draw_message(
+					f,
+					rect,
+					"No open issues.\n\nPress [n] to create one.",
+				);
 			}
-			LoadState::Loaded(mrs) => self.render_list(f, rect, mrs),
+			LoadState::Loaded(issues) => {
+				self.render_list(f, rect, issues);
+			}
+		}
+
+		// new-issue input renders on top of the list when active
+		if self.new_issue_input.is_visible() {
+			self.new_issue_input.draw(f, rect)?;
 		}
 
 		Ok(())
 	}
 }
 
-impl Component for MergeRequestsTab {
+impl Component for IssuesTab {
 	fn commands(
 		&self,
 		out: &mut Vec<CommandInfo>,
@@ -329,8 +460,18 @@ impl Component for MergeRequestsTab {
 		if self.visible || force_all {
 			out.push(CommandInfo::new(
 				strings::commands::scroll(&self.key_config),
-				self.loaded().is_some_and(|m| !m.is_empty()),
+				self.loaded().is_some_and(|i| !i.is_empty()),
 				true,
+			));
+			out.push(CommandInfo::new(
+				strings::commands::issue_new(&self.key_config),
+				true,
+				self.loaded().is_some(),
+			));
+			out.push(CommandInfo::new(
+				strings::commands::issue_close(&self.key_config),
+				self.selected_issue().is_some(),
+				self.loaded().is_some(),
 			));
 		}
 
@@ -360,6 +501,24 @@ impl Component for MergeRequestsTab {
 			return Ok(EventState::Consumed);
 		}
 
+		// while entering a new issue title, the input owns all keys
+		if self.new_issue_input.is_visible() {
+			if self.new_issue_input.event(ev)?.is_consumed() {
+				return Ok(EventState::Consumed);
+			}
+			if let Event::Key(k) = ev {
+				if key_match(k, self.key_config.keys.enter) {
+					self.submit_new_issue();
+				} else if key_match(
+					k,
+					self.key_config.keys.exit_popup,
+				) {
+					self.new_issue_input.hide();
+				}
+			}
+			return Ok(EventState::Consumed);
+		}
+
 		if let Event::Key(k) = ev {
 			if key_match(k, self.key_config.keys.move_down) {
 				self.move_selection(true);
@@ -373,6 +532,21 @@ impl Component for MergeRequestsTab {
 					LoadState::NeedToken | LoadState::Error(_)
 				) {
 				self.show_token_prompt();
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('n'))
+				&& self.loaded().is_some()
+			{
+				self.show_new_issue_prompt();
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('c'))
+				&& self.selected_issue().is_some()
+			{
+				self.close_selected();
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('r'))
+				&& self.loaded().is_some()
+			{
+				self.reload();
 				return Ok(EventState::Consumed);
 			}
 		}

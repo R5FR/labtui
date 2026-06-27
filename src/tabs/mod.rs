@@ -8,12 +8,14 @@ ui:
 - [`Stashing`]: Managing one stash
 - [`StashList`]: Managing all stashes
 - [`MergeRequestsTab`]: GitLab merge requests for the current project
+- [`IssuesTab`]: GitLab issues for the current project
 
 Many of the tabs can expand to show more details. This is done via
 Enter or right-arrow. To close again, press ESC.
 */
 
 mod files;
+mod issues;
 mod merge_requests;
 mod revlog;
 mod stashing;
@@ -21,6 +23,7 @@ mod stashlist;
 mod status;
 
 pub use files::FilesTab;
+pub use issues::IssuesTab;
 pub use merge_requests::MergeRequestsTab;
 pub use revlog::Revlog;
 pub use stashing::{Stashing, StashingOptions};

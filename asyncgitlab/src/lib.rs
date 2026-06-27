@@ -17,17 +17,22 @@ pub mod remote;
 pub mod runtime;
 pub mod types;
 
-pub use client::{GitLabClient, MergeRequestScope};
+pub use client::{
+	GitLabClient, IssueScope, MergeRequestScope, StateEvent,
+};
 pub use config::{
 	delete_token, has_token, resolve_token, store_token,
 };
 pub use error::{Error, Result};
 pub use job::{
-	AsyncGitLabNotification, AsyncMergeRequestsJob, MergeRequestsResult,
+	ActionResult, AsyncActionJob, AsyncGitLabNotification,
+	AsyncIssuesJob, AsyncMergeRequestsJob, GitLabAction,
+	IssuesResult, MergeRequestsResult,
 };
 pub use remote::GitLabRemote;
 pub use types::{
-	MergeRequest, MergeRequestState, Pipeline, PipelineStatus,
+	CiStatus, Issue, IssueState, Job, MergeRequest, MergeRequestState,
+	Note, Pipeline, PipelineStatus, User,
 };
 
 /// Build a client straight from a git remote URL, using a token from the
