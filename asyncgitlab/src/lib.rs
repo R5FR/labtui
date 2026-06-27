@@ -18,7 +18,7 @@ pub mod remote;
 pub mod runtime;
 pub mod types;
 
-pub use board::{build_board, BoardColumn};
+pub use board::{build_board, BoardColumn, BoardView};
 pub use client::{
 	GitLabClient, IssueScope, MergeRequestScope, StateEvent,
 };
@@ -29,8 +29,10 @@ pub use error::{Error, Result};
 pub use job::{
 	ActionResult, AsyncActionJob, AsyncBoardJob,
 	AsyncGitLabNotification, AsyncIssueDetailJob, AsyncIssuesJob,
-	AsyncMergeRequestsJob, BoardResult, GitLabAction,
+	AsyncMergeRequestsJob, AsyncMrDetailJob, AsyncPipelineJobsJob,
+	AsyncPipelinesJob, AsyncTraceJob, BoardResult, GitLabAction,
 	IssueDetailResult, IssuesResult, MergeRequestsResult,
+	MrDetailResult, PipelineJobsResult, PipelinesResult, TraceResult,
 };
 pub use remote::GitLabRemote;
 pub use types::{

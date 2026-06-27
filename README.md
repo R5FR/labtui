@@ -19,16 +19,18 @@ labtui adds a native **Merge Requests** tab that talks to the GitLab API directl
   - Async git API for fluid, non-blocking control
 
 - **GitLab integration:**
-  - Merge Request list tab (opened, draft, merged, closed)
-  - Issues tab — list open issues, board view by label (`b`), create (`n`) and close (`c`) them
+  - Merge Requests tab — list, detail + discussion, and actions: merge (`m`),
+    approve/unapprove (`a`/`u`), rebase (`b`), close/reopen (`c`), comment (`n`)
+  - Issues tab — list, board view by label (`b`, switch boards with `[`/`]`),
+    detail + comments, create (`n`), close/reopen (`c`), comment
+  - CI tab — pipelines → jobs → job trace, with retry (`t`) / cancel (`x`)
+  - "Open in browser" (`o`) on any selection
   - Pipeline status badge per MR
   - Token stored securely in the system keyring
   - Auto-detected from the git remote URL — no config needed if the remote is GitLab
 
-  The underlying `asyncgitlab` crate also covers MR actions (merge / approve /
-  rebase / comment), issue & MR notes, and pipelines/jobs (list / trace /
-  retry / cancel); see [`asyncgitlab/ROADMAP.md`](asyncgitlab/ROADMAP.md) for
-  what is exposed in the UI today.
+  See [`asyncgitlab/ROADMAP.md`](asyncgitlab/ROADMAP.md) for the full coverage
+  matrix.
 
 ## Build
 
@@ -60,7 +62,11 @@ export GITLAB_TOKEN=your_token
 labtui
 ```
 
-Use the `Tab` / `Shift+Tab` keys (or the number keys) to navigate between tabs. The **Merge Requests** (`6`) and **Issues** (`7`) tabs appear automatically when a GitLab remote is detected. In the Issues tab, press `Enter` to open an issue's detail and comment thread (`n` to add a comment, `c` to close it, `Esc` to go back), `n` to create an issue, `c` to close the selected one, `r` to refresh, and `b` to toggle between the list and the column board view (use `←`/`→` to move between board columns).
+Use the `Tab` / `Shift+Tab` keys (or the number keys) to navigate between tabs. The **Merge Requests** (`6`), **Issues** (`7`) and **CI** (`8`) tabs appear automatically when a GitLab remote is detected.
+
+- **Issues** (`7`): `Enter` opens the detail + comment thread (`n` comment, `c` close/reopen, `o` browser, `Esc` back); in the list, `n` creates an issue, `c` closes/reopens, `r` refreshes, `b` toggles the board view (`←`/`→` between columns, `[`/`]` between boards).
+- **Merge Requests** (`6`): `Enter` opens the detail; from there `m` merge, `a`/`u` approve/unapprove, `b` rebase, `c` close/reopen, `n` comment, `o` browser. In the list, `o` opens in browser and `r` refreshes.
+- **CI** (`8`): `Enter` drills pipelines → jobs → trace; `t` retries, `x` cancels, `o` opens in browser, `Esc` goes back up, `r` refreshes.
 
 ## Key Bindings
 

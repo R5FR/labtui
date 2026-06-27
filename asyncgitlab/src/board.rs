@@ -14,6 +14,15 @@ pub struct BoardColumn {
 	pub issues: Vec<Issue>,
 }
 
+/// A fully resolved board view: the columns of the selected board plus the
+/// names of all available boards (so the UI can let the user switch).
+#[derive(Debug, Clone)]
+pub struct BoardView {
+	pub board_names: Vec<String>,
+	pub selected: usize,
+	pub columns: Vec<BoardColumn>,
+}
+
 /// Bucket `issues` into board columns following `lists`.
 pub fn build_board(
 	lists: &[BoardList],

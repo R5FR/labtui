@@ -16,8 +16,8 @@ use asyncgit::{
 use asyncgitlab::{
 	has_token, store_token, AsyncActionJob, AsyncBoardJob,
 	AsyncGitLabNotification, AsyncIssueDetailJob, AsyncIssuesJob,
-	BoardColumn, GitLabAction, GitLabRemote, Issue, IssueScope,
-	IssueState, Note, StateEvent,
+	BoardColumn, BoardView, GitLabAction, GitLabRemote, Issue,
+	IssueScope, IssueState, Note, StateEvent,
 };
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
@@ -54,7 +54,9 @@ pub struct IssuesTab {
 	remote: Option<GitLabRemote>,
 	view: View,
 	list: Load<Vec<Issue>>,
-	board: Load<Vec<BoardColumn>>,
+	board: Load<BoardView>,
+	/// which board to show (index into the project's boards)
+	board_index: usize,
 	/// open issue detail view, if any
 	detail: Option<Load<DetailData>>,
 	/// iid of the issue shown in the detail view (for reloading)
@@ -113,6 +115,7 @@ impl IssuesTab {
 			view: View::List,
 			list: Load::Loading,
 			board: Load::Loading,
+			board_index: 0,
 			detail: None,
 			detail_iid: None,
 			detail_scroll: 0,
@@ -184,8 +187,10 @@ impl IssuesTab {
 				if matches!(self.board, Load::Loading)
 					&& !self.async_board.is_pending()
 				{
-					self.async_board
-						.spawn(AsyncBoardJob::new(remote));
+					self.async_board.spawn(AsyncBoardJob::new(
+						remote,
+						self.board_index,
+					));
 				}
 			}
 		}
@@ -349,16 +354,34 @@ impl IssuesTab {
 			.is_some_and(|i| i.state != IssueState::Closed)
 	}
 
-	/// Close the currently selected issue (no-op if already closed).
-	fn close_selected(&mut self) {
-		let iid = match self.selected_issue() {
-			Some(i) if i.state != IssueState::Closed => i.iid,
-			_ => return,
+	/// Close the selected issue, or reopen it if already closed.
+	fn toggle_state_selected(&mut self) {
+		let (iid, event) = match self.selected_issue() {
+			Some(i) if i.state == IssueState::Closed => {
+				(i.iid, StateEvent::Reopen)
+			}
+			Some(i) => (i.iid, StateEvent::Close),
+			None => return,
 		};
 		self.spawn_action(GitLabAction::SetIssueState {
 			iid,
-			event: StateEvent::Close,
+			event,
 		});
+	}
+
+	/// Open the selected issue (or the one in the detail view) in a browser.
+	fn open_in_browser(&mut self) {
+		let url = if let Some(Load::Loaded(d)) = &self.detail {
+			Some(d.issue.web_url.clone())
+		} else {
+			self.selected_issue().map(|i| i.web_url.clone())
+		};
+		let Some(url) = url.filter(|u| !u.is_empty()) else {
+			return;
+		};
+		if let Err(e) = crate::open_browser::open_in_browser(&url) {
+			self.status_msg = Some(format!("error: {e}"));
+		}
 	}
 
 	fn spawn_action(&mut self, action: GitLabAction) {
@@ -391,7 +414,10 @@ impl IssuesTab {
 				if let Some(job) = self.async_board.take_last() {
 					if let Some(result) = job.result() {
 						self.board = match result {
-							Ok(cols) => Load::Loaded(cols),
+							Ok(view) => {
+								self.board_index = view.selected;
+								Load::Loaded(view)
+							}
 							Err(e) => Load::Error(e),
 						};
 						self.clamp_board_selection();
@@ -424,7 +450,11 @@ impl IssuesTab {
 					}
 				}
 			}
-			AsyncGitLabNotification::MergeRequests => {}
+			AsyncGitLabNotification::MergeRequests
+			| AsyncGitLabNotification::MrDetail
+			| AsyncGitLabNotification::Pipelines
+			| AsyncGitLabNotification::PipelineJobs
+			| AsyncGitLabNotification::JobTrace => {}
 		}
 	}
 
@@ -444,9 +474,30 @@ impl IssuesTab {
 
 	fn board_columns(&self) -> Option<&[BoardColumn]> {
 		match &self.board {
-			Load::Loaded(cols) => Some(cols),
+			Load::Loaded(view) => Some(&view.columns),
 			_ => None,
 		}
+	}
+
+	/// Switch to the next/previous board, if more than one exists.
+	fn cycle_board(&mut self, next: bool) {
+		let Load::Loaded(view) = &self.board else {
+			return;
+		};
+		let len = view.board_names.len();
+		if len <= 1 {
+			return;
+		}
+		let current = view.selected;
+		self.board_index = if next {
+			(current + 1) % len
+		} else {
+			current.checked_sub(1).unwrap_or(len - 1)
+		};
+		self.board = Load::Loading;
+		self.board_col = 0;
+		self.board_row = 0;
+		self.ensure_load();
 	}
 
 	/// True when the active view has finished loading at least once.
@@ -648,10 +699,39 @@ impl IssuesTab {
 		&self,
 		f: &mut Frame,
 		rect: Rect,
-		columns: &[BoardColumn],
+		view: &BoardView,
 	) {
-		let (board_area, footer) = self.split_footer(rect);
+		let (content, footer) = self.split_footer(rect);
 
+		// one-line header: board name + switch hint
+		let name = view
+			.board_names
+			.get(view.selected)
+			.map_or("board", String::as_str);
+		let switch = if view.board_names.len() > 1 {
+			format!(
+				"   ([/] switch · {}/{})",
+				view.selected + 1,
+				view.board_names.len()
+			)
+		} else {
+			String::new()
+		};
+		let chunks = Layout::default()
+			.direction(Direction::Vertical)
+			.constraints([
+				Constraint::Length(1),
+				Constraint::Min(1),
+			])
+			.split(content);
+		f.render_widget(
+			Paragraph::new(format!("Board: {name}{switch}"))
+				.style(self.theme.text(true, true)),
+			chunks[0],
+		);
+		let board_area = chunks[1];
+
+		let columns = &view.columns;
 		if columns.is_empty() {
 			self.draw_message(f, board_area, "No board columns.");
 			self.draw_footer(f, footer);
@@ -776,12 +856,12 @@ impl IssuesTab {
 		}
 
 		let close_hint = if issue.state == IssueState::Closed {
-			""
+			"[c] reopen"
 		} else {
-			"  [c] close"
+			"[c] close"
 		};
 		let title = format!(
-			"Issue #{}  ·  [Esc] back  [n] comment{close_hint}",
+			"Issue #{}  ·  [Esc] back  [n] comment  {close_hint}  [o] open",
 			issue.iid
 		);
 		let block = Block::default()
@@ -893,9 +973,9 @@ impl DrawableComponent for IssuesTab {
 					}
 				}
 				View::Board => {
-					let cols =
-						self.board_columns().unwrap_or(&[]);
-					self.render_board(f, rect, cols);
+					if let Load::Loaded(view) = &self.board {
+						self.render_board(f, rect, view);
+					}
 				}
 			},
 		}
@@ -954,10 +1034,20 @@ impl Component for IssuesTab {
 				true,
 				self.content_loaded(),
 			));
+			let close_cmd = if self.selected_is_open() {
+				strings::commands::issue_close(&self.key_config)
+			} else {
+				strings::commands::issue_reopen(&self.key_config)
+			};
 			out.push(CommandInfo::new(
-				strings::commands::issue_close(&self.key_config),
-				self.selected_is_open(),
+				close_cmd,
+				self.selected_issue().is_some(),
 				self.content_loaded(),
+			));
+			out.push(CommandInfo::new(
+				strings::commands::gitlab_browser(&self.key_config),
+				self.selected_issue().is_some() || self.detail_open(),
+				self.content_loaded() || self.detail_open(),
 			));
 		}
 
@@ -1007,6 +1097,16 @@ impl Component for IssuesTab {
 			{
 				self.move_board_col(false);
 				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char(']'))
+				&& self.view == View::Board
+			{
+				self.cycle_board(true);
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('['))
+				&& self.view == View::Board
+			{
+				self.cycle_board(false);
+				return Ok(EventState::Consumed);
 			} else if key_match(k, self.key_config.keys.enter) {
 				if token_missing {
 					self.show_token_prompt();
@@ -1025,9 +1125,14 @@ impl Component for IssuesTab {
 				self.show_new_issue_prompt();
 				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('c'))
-				&& self.selected_is_open()
+				&& self.selected_issue().is_some()
 			{
-				self.close_selected();
+				self.toggle_state_selected();
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('o'))
+				&& self.selected_issue().is_some()
+			{
+				self.open_in_browser();
 				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('r'))
 				&& !token_missing
@@ -1123,19 +1228,24 @@ impl IssuesTab {
 			self.scroll_detail(false);
 		} else if matches!(k.code, KeyCode::Char('n')) {
 			self.show_comment_prompt();
+		} else if matches!(k.code, KeyCode::Char('o')) {
+			self.open_in_browser();
 		} else if matches!(k.code, KeyCode::Char('c')) {
-			let iid = match &self.detail {
-				Some(Load::Loaded(d))
-					if d.issue.state != IssueState::Closed =>
-				{
-					Some(d.issue.iid)
-				}
+			let action = match &self.detail {
+				Some(Load::Loaded(d)) => Some((
+					d.issue.iid,
+					if d.issue.state == IssueState::Closed {
+						StateEvent::Reopen
+					} else {
+						StateEvent::Close
+					},
+				)),
 				_ => None,
 			};
-			if let Some(iid) = iid {
+			if let Some((iid, event)) = action {
 				self.spawn_action(GitLabAction::SetIssueState {
 					iid,
-					event: StateEvent::Close,
+					event,
 				});
 			}
 		}

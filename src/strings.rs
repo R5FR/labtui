@@ -105,6 +105,12 @@ pub fn tab_issues(key_config: &SharedKeyConfig) -> String {
 		key_config.get_hint(key_config.keys.tab_issues)
 	)
 }
+pub fn tab_pipelines(key_config: &SharedKeyConfig) -> String {
+	format!(
+		"CI [{}]",
+		key_config.get_hint(key_config.keys.tab_pipelines)
+	)
+}
 /// Short how-to shown when no GitLab token is available for `host`.
 /// `write` selects the recommended scope (write actions need `api`).
 pub fn gitlab_token_help(host: &str, write: bool) -> String {
@@ -682,10 +688,51 @@ pub mod commands {
 			CMD_GROUP_GENERAL,
 		)
 	}
+	pub fn mr_open(_key_config: &SharedKeyConfig) -> CommandText {
+		CommandText::new(
+			"Open [enter]".to_string(),
+			"open the merge request's detail and discussion",
+			CMD_GROUP_GITLAB,
+		)
+	}
+	pub fn mr_merge(_key_config: &SharedKeyConfig) -> CommandText {
+		CommandText::new(
+			"Actions [m/a/u/b/c]".to_string(),
+			"in detail: merge / approve / unapprove / rebase / close",
+			CMD_GROUP_GITLAB,
+		)
+	}
 	pub fn issue_open(_key_config: &SharedKeyConfig) -> CommandText {
 		CommandText::new(
 			"Open [enter]".to_string(),
 			"open the selected issue's detail and comments",
+			CMD_GROUP_GITLAB,
+		)
+	}
+	pub fn pipeline_open(
+		_key_config: &SharedKeyConfig,
+	) -> CommandText {
+		CommandText::new(
+			"Open [enter]".to_string(),
+			"drill into pipeline jobs / job trace",
+			CMD_GROUP_GITLAB,
+		)
+	}
+	pub fn pipeline_retry(
+		_key_config: &SharedKeyConfig,
+	) -> CommandText {
+		CommandText::new(
+			"Retry [t]".to_string(),
+			"retry the selected pipeline or job",
+			CMD_GROUP_GITLAB,
+		)
+	}
+	pub fn pipeline_cancel(
+		_key_config: &SharedKeyConfig,
+	) -> CommandText {
+		CommandText::new(
+			"Cancel [x]".to_string(),
+			"cancel the selected pipeline or job",
 			CMD_GROUP_GITLAB,
 		)
 	}
@@ -707,6 +754,22 @@ pub mod commands {
 		CommandText::new(
 			"Close [c]".to_string(),
 			"close the selected GitLab issue",
+			CMD_GROUP_GITLAB,
+		)
+	}
+	pub fn issue_reopen(_key_config: &SharedKeyConfig) -> CommandText {
+		CommandText::new(
+			"Reopen [c]".to_string(),
+			"reopen the selected GitLab issue",
+			CMD_GROUP_GITLAB,
+		)
+	}
+	pub fn gitlab_browser(
+		_key_config: &SharedKeyConfig,
+	) -> CommandText {
+		CommandText::new(
+			"Browser [o]".to_string(),
+			"open the selection in your web browser",
 			CMD_GROUP_GITLAB,
 		)
 	}

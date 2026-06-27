@@ -29,8 +29,8 @@ use crate::{
 	setup_popups,
 	strings::{self, ellipsis_trim_start, order},
 	tabs::{
-		FilesTab, IssuesTab, MergeRequestsTab, Revlog, StashList,
-		Stashing, Status,
+		FilesTab, IssuesTab, MergeRequestsTab, PipelinesTab, Revlog,
+		StashList, Stashing, Status,
 	},
 	try_or_popup,
 	ui::style::{SharedTheme, Theme},
@@ -112,6 +112,7 @@ pub struct App {
 	files_tab: FilesTab,
 	merge_requests_tab: MergeRequestsTab,
 	issues_tab: IssuesTab,
+	pipelines_tab: PipelinesTab,
 	queue: Queue,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
@@ -247,6 +248,7 @@ impl App {
 			files_tab: FilesTab::new(&env, select_file),
 			merge_requests_tab: MergeRequestsTab::new(&env),
 			issues_tab: IssuesTab::new(&env),
+			pipelines_tab: PipelinesTab::new(&env),
 			checkout_option_popup: CheckoutOptionPopup::new(&env),
 			goto_line_popup: GotoLinePopup::new(&env),
 			tab: 0,
@@ -311,6 +313,9 @@ impl App {
 				6 => {
 					self.issues_tab.draw(f, chunks_main[1])?;
 				}
+				7 => {
+					self.pipelines_tab.draw(f, chunks_main[1])?;
+				}
 				_ => bail!("unknown tab"),
 			}
 		}
@@ -369,6 +374,9 @@ impl App {
 				) || key_match(
 					k,
 					self.key_config.keys.tab_issues,
+				) || key_match(
+					k,
+					self.key_config.keys.tab_pipelines,
 				) {
 					self.switch_tab(k)?;
 					NeedsUpdate::COMMANDS
@@ -435,6 +443,7 @@ impl App {
 		self.stashlist_tab.update()?;
 		self.merge_requests_tab.update();
 		self.issues_tab.update();
+		self.pipelines_tab.update();
 		self.reset_popup.update()?;
 
 		self.update_commands();
@@ -466,6 +475,7 @@ impl App {
 		if let AsyncNotification::GitLab(ev) = ev {
 			self.merge_requests_tab.update_gitlab(ev);
 			self.issues_tab.update_gitlab(ev);
+			self.pipelines_tab.update_gitlab(ev);
 		}
 
 		self.files_tab.update_async(ev)?;
@@ -510,6 +520,7 @@ impl App {
 			|| self.tags_popup.any_work_pending()
 			|| self.merge_requests_tab.any_work_pending()
 			|| self.issues_tab.any_work_pending()
+			|| self.pipelines_tab.any_work_pending()
 	}
 
 	///
@@ -565,7 +576,8 @@ impl App {
 			stashing_tab,
 			stashlist_tab,
 			merge_requests_tab,
-			issues_tab
+			issues_tab,
+			pipelines_tab
 		]
 	);
 
@@ -610,6 +622,7 @@ impl App {
 		if self.any_popup_visible()
 			|| self.merge_requests_tab.is_editing()
 			|| self.issues_tab.is_editing()
+			|| self.pipelines_tab.is_editing()
 		{
 			return false;
 		}
@@ -641,6 +654,7 @@ impl App {
 			&mut self.stashlist_tab,
 			&mut self.merge_requests_tab,
 			&mut self.issues_tab,
+			&mut self.pipelines_tab,
 		]
 	}
 
@@ -673,6 +687,8 @@ impl App {
 			self.switch_to_tab(&AppTabs::MergeRequests)?;
 		} else if key_match(k, self.key_config.keys.tab_issues) {
 			self.switch_to_tab(&AppTabs::Issues)?;
+		} else if key_match(k, self.key_config.keys.tab_pipelines) {
+			self.switch_to_tab(&AppTabs::Pipelines)?;
 		}
 
 		Ok(())
@@ -703,6 +719,7 @@ impl App {
 			AppTabs::Stashlist => self.set_tab(4)?,
 			AppTabs::MergeRequests => self.set_tab(5)?,
 			AppTabs::Issues => self.set_tab(6)?,
+			AppTabs::Pipelines => self.set_tab(7)?,
 		}
 		Ok(())
 	}
@@ -1224,6 +1241,7 @@ impl App {
 			Span::raw(strings::tab_stashes(&self.key_config)),
 			Span::raw(strings::tab_merge_requests(&self.key_config)),
 			Span::raw(strings::tab_issues(&self.key_config)),
+			Span::raw(strings::tab_pipelines(&self.key_config)),
 		];
 		let divider = strings::tab_divider(&self.key_config);
 

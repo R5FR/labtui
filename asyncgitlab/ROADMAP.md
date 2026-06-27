@@ -24,14 +24,15 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 | Capability | Library | UI |
 |---|---|---|
 | List (opened / all) | ✅ | ✅ |
-| Get one | ✅ | ⬜ |
+| Get one | ✅ | ✅ |
 | Create | ✅ | 🟡 |
-| Merge | ✅ | 🟡 |
-| Close / reopen | ✅ | 🟡 |
-| Approve / unapprove | ✅ | 🟡 |
-| Rebase | ✅ | 🟡 |
-| Notes: list / add | ✅ | ⬜ |
-| Detail view + discussion thread | ⬜ | ⬜ |
+| Merge | ✅ | ✅ (`m`) |
+| Close / reopen | ✅ | ✅ (`c`) |
+| Approve / unapprove | ✅ | ✅ (`a`/`u`) |
+| Rebase | ✅ | ✅ (`b`) |
+| Notes: list / add | ✅ | ✅ |
+| Detail view + discussion thread | ✅ | ✅ (`enter`) |
+| Open in browser | ✅ | ✅ (`o`) |
 | Diff / changes view | ⬜ | ⬜ |
 
 ## Issues (priority)
@@ -39,12 +40,13 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 | Capability | Library | UI |
 |---|---|---|
 | List (opened / all) | ✅ | ✅ |
-| Board view (columns by label) | ✅ | ✅ (`b`) |
-| Get one | ✅ | ⬜ |
+| Board view (columns by label, switchable) | ✅ | ✅ (`b`, `[`/`]`) |
+| Get one | ✅ | ✅ |
 | Create | ✅ | ✅ (`n`) |
-| Close / reopen | ✅ | ✅ close (`c`) |
+| Close / reopen | ✅ | ✅ (`c`) |
 | Notes: list / add | ✅ | ✅ |
 | Detail view + discussion thread | ✅ | ✅ (`enter`) |
+| Open in browser | ✅ | ✅ (`o`) |
 | Assignees / labels / milestone editing | ⬜ | ⬜ |
 
 ## Pipelines & CI/CD
@@ -52,27 +54,26 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 | Capability | Library | UI |
 |---|---|---|
 | Latest pipeline (CI badge) | ✅ | ⬜ |
-| List pipelines | ✅ | ⬜ |
-| Pipeline jobs | ✅ | ⬜ |
-| Job trace (logs) | ✅ | ⬜ |
-| Create / retry / cancel pipeline | ✅ | 🟡 |
-| Retry / cancel job | ✅ | ⬜ |
+| List pipelines | ✅ | ✅ (CI tab) |
+| Pipeline jobs | ✅ | ✅ (`enter`) |
+| Job trace (logs) | ✅ | ✅ (`enter`) |
+| Create / retry / cancel pipeline | ✅ | ✅ retry/cancel (`t`/`x`) |
+| Retry / cancel job | ✅ | ✅ (`t`/`x`) |
+| Open in browser | ✅ | ✅ (`o`) |
 
 ## Not yet started (library or UI)
 
+- MR diff / changes view
+- Issue/MR assignees, labels, milestone editing; list filtering
+- Pipeline filtering by current branch; trigger a new pipeline from the UI
 - Branches / tags / commits via API, commit statuses
 - Members, labels, milestones (for filtering & assignment)
-- "Open in browser" actions (we already have `web_url` on every object)
 - Project metadata / settings, environments, deployments
 - Releases, packages, container registry, snippets, wiki
 
 ## Suggested next steps
 
-1. **MR & Issue detail views** — reuse the list tabs; on `Enter`, fetch the
-   single object + notes and show a scrollable thread, with comment input.
-2. **MR action keybindings** — surface the already-implemented merge/approve/
-   close/rebase actions in `MergeRequestsTab` (same `AsyncActionJob` plumbing
-   the Issues tab uses).
-3. **Pipelines tab** — list pipelines for the current branch, drill into jobs,
-   stream/show a job trace.
-4. **"Open in browser"** — a single keybinding using `web_url`.
+1. **MR diff view** — show the changed files / diff of a merge request.
+2. **Filtering** — filter issues/MRs by label, assignee, milestone; filter
+   pipelines by the current branch.
+3. **Issue/MR editing** — assignees, labels, milestone.

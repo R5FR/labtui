@@ -82,6 +82,7 @@ pub enum AppTabs {
 	Stashlist,
 	MergeRequests,
 	Issues,
+	Pipelines,
 }
 
 ///

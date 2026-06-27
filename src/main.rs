@@ -69,6 +69,7 @@ mod gitui;
 mod input;
 mod keys;
 mod notify_mutex;
+mod open_browser;
 mod options;
 mod popup_stack;
 mod popups;

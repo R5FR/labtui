@@ -14,39 +14,50 @@ use asyncgit::{
 	sync::{get_default_remote, get_remote_url, RepoPathRef},
 };
 use asyncgitlab::{
-	has_token, store_token, AsyncGitLabNotification,
-	AsyncMergeRequestsJob, GitLabRemote, MergeRequest,
-	MergeRequestScope, MergeRequestState,
+	has_token, store_token, AsyncActionJob, AsyncGitLabNotification,
+	AsyncMergeRequestsJob, AsyncMrDetailJob, GitLabAction,
+	GitLabRemote, MergeRequest, MergeRequestScope, MergeRequestState,
+	Note, StateEvent,
 };
-use crossterm::event::Event;
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{
-	layout::{Alignment, Rect},
+	layout::{Alignment, Constraint, Direction, Layout, Rect},
 	text::{Line, Span},
-	widgets::{Block, Borders, List, ListItem, Paragraph},
+	widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 	Frame,
 };
 
-/// Loading state of the merge request list.
-enum LoadState {
-	/// no GitLab remote could be detected for this repo
-	NoRemote,
-	/// a GitLab remote exists but no token is available yet
-	NeedToken,
-	/// request in flight, nothing loaded yet
+/// Loading state of a fetched payload.
+enum Load<T> {
 	Loading,
-	/// loaded merge requests (possibly empty)
-	Loaded(Vec<MergeRequest>),
-	/// request failed
+	Loaded(T),
 	Error(String),
+}
+
+/// Loaded detail of a single merge request: the MR plus its comment thread.
+struct DetailData {
+	mr: MergeRequest,
+	notes: Vec<Note>,
 }
 
 pub struct MergeRequestsTab {
 	visible: bool,
 	remote: Option<GitLabRemote>,
-	state: LoadState,
+	list: Load<Vec<MergeRequest>>,
 	selection: usize,
+	/// open MR detail view, if any
+	detail: Option<Load<DetailData>>,
+	detail_iid: Option<u64>,
+	detail_scroll: u16,
+	/// transient one-line feedback after a write action
+	status_msg: Option<String>,
+	/// error from storing a token in the keyring
+	token_error: Option<String>,
 	async_mrs: AsyncSingleJob<AsyncMergeRequestsJob>,
+	async_detail: AsyncSingleJob<AsyncMrDetailJob>,
+	async_action: AsyncSingleJob<AsyncActionJob>,
 	token_input: TextInputComponent,
+	comment_input: TextInputComponent,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
 }
@@ -55,27 +66,40 @@ impl MergeRequestsTab {
 	pub fn new(env: &Environment) -> Self {
 		let remote = detect_gitlab_remote(&env.repo);
 
-		let state = match &remote {
-			None => LoadState::NoRemote,
-			Some(r) if has_token(&r.host) => LoadState::Loading,
-			Some(_) => LoadState::NeedToken,
-		};
-
 		let token_input = TextInputComponent::new(
 			env,
 			"GitLab token",
-			"paste a token with read_api scope, then press [Enter]",
+			"paste a token with api scope, then press [Enter]",
 			false,
 		)
 		.with_input_type(InputType::Password);
 
+		let comment_input = TextInputComponent::new(
+			env,
+			"New comment",
+			"comment body, then press [Enter]",
+			true,
+		);
+
 		Self {
 			visible: false,
-			state,
 			remote,
+			list: Load::Loading,
 			selection: 0,
+			detail: None,
+			detail_iid: None,
+			detail_scroll: 0,
+			status_msg: None,
+			token_error: None,
 			async_mrs: AsyncSingleJob::new(env.sender_gitlab.clone()),
+			async_detail: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
+			async_action: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
 			token_input,
+			comment_input,
 			theme: env.theme.clone(),
 			key_config: env.key_config.clone(),
 		}
@@ -87,29 +111,38 @@ impl MergeRequestsTab {
 		}
 	}
 
-	/// Decide what to do based on remote + token availability: spawn a load,
-	/// or surface the token prompt.
+	fn token_available(&self) -> bool {
+		self.remote
+			.as_ref()
+			.is_some_and(|r| has_token(&r.host))
+	}
+
 	fn ensure_load(&mut self) {
+		if !self.token_available() {
+			return;
+		}
+		if self.token_input.is_visible() {
+			self.token_input.hide();
+		}
 		let Some(remote) = self.remote.clone() else {
 			return;
 		};
-
-		if has_token(&remote.host) {
-			if self.token_input.is_visible() {
-				self.token_input.hide();
-			}
-			if !self.async_mrs.is_pending() {
-				if matches!(self.state, LoadState::NeedToken) {
-					self.state = LoadState::Loading;
-				}
-				self.async_mrs.spawn(AsyncMergeRequestsJob::new(
-					remote,
-					MergeRequestScope::Opened,
-				));
-			}
-		} else {
-			self.state = LoadState::NeedToken;
+		if self.async_action.is_pending() {
+			return;
 		}
+		if matches!(self.list, Load::Loading)
+			&& !self.async_mrs.is_pending()
+		{
+			self.async_mrs.spawn(AsyncMergeRequestsJob::new(
+				remote,
+				MergeRequestScope::Opened,
+			));
+		}
+	}
+
+	fn reload(&mut self) {
+		self.list = Load::Loading;
+		self.ensure_load();
 	}
 
 	fn show_token_prompt(&mut self) {
@@ -119,37 +152,158 @@ impl MergeRequestsTab {
 		}
 	}
 
-	/// True while the user is entering a token (used to block global quit).
+	/// True while the user is entering text (used to block global quit).
 	pub fn is_editing(&self) -> bool {
 		self.token_input.is_visible()
+			|| self.comment_input.is_visible()
 	}
 
-	/// Persist the typed token to the OS keyring, then start loading.
 	fn submit_token(&mut self) {
 		let token = self.token_input.get_text().trim().to_string();
 		if token.is_empty() {
 			return;
 		}
-
 		let Some(host) =
 			self.remote.as_ref().map(|r| r.host.clone())
 		else {
 			return;
 		};
-
 		match store_token(&host, &token) {
 			Ok(()) => {
 				self.token_input.clear();
 				self.token_input.hide();
-				self.state = LoadState::Loading;
+				self.token_error = None;
+				self.list = Load::Loading;
 				self.ensure_load();
 			}
 			Err(e) => {
 				self.token_input.hide();
-				self.state = LoadState::Error(format!(
+				self.token_error = Some(format!(
 					"could not store token in keyring: {e}"
 				));
 			}
+		}
+	}
+
+	fn open_detail(&mut self) {
+		let Some(iid) = self.selected_mr().map(|m| m.iid) else {
+			return;
+		};
+		let Some(remote) = self.remote.clone() else {
+			return;
+		};
+		self.detail_iid = Some(iid);
+		self.detail_scroll = 0;
+		self.detail = Some(Load::Loading);
+		self.async_detail
+			.spawn(AsyncMrDetailJob::new(remote, iid));
+	}
+
+	fn close_detail(&mut self) {
+		self.detail = None;
+		self.detail_iid = None;
+		self.detail_scroll = 0;
+	}
+
+	fn reload_detail(&mut self) {
+		let (Some(iid), Some(remote)) =
+			(self.detail_iid, self.remote.clone())
+		else {
+			return;
+		};
+		self.detail = Some(Load::Loading);
+		self.async_detail
+			.spawn(AsyncMrDetailJob::new(remote, iid));
+	}
+
+	const fn detail_open(&self) -> bool {
+		self.detail.is_some()
+	}
+
+	const fn scroll_detail(&mut self, down: bool) {
+		if down {
+			self.detail_scroll = self.detail_scroll.saturating_add(1);
+		} else {
+			self.detail_scroll = self.detail_scroll.saturating_sub(1);
+		}
+	}
+
+	fn show_comment_prompt(&mut self) {
+		if !self.comment_input.is_visible() {
+			self.comment_input.clear();
+			let _ = self.comment_input.show();
+		}
+	}
+
+	fn submit_comment(&mut self) {
+		let body = self.comment_input.get_text().trim().to_string();
+		self.comment_input.clear();
+		self.comment_input.hide();
+		let Some(iid) = self.detail_iid else {
+			return;
+		};
+		if body.is_empty() {
+			return;
+		}
+		self.spawn_action(GitLabAction::CreateMergeRequestNote {
+			iid,
+			body,
+		});
+	}
+
+	/// The iid the action keys (merge/approve/…) apply to: the detail view's
+	/// MR, else the selected list row.
+	fn action_iid(&self) -> Option<u64> {
+		if let Some(iid) = self.detail_iid {
+			return Some(iid);
+		}
+		self.selected_mr().map(|m| m.iid)
+	}
+
+	fn current_mr(&self) -> Option<&MergeRequest> {
+		if let Some(Load::Loaded(d)) = &self.detail {
+			return Some(&d.mr);
+		}
+		self.selected_mr()
+	}
+
+	fn spawn_action(&mut self, action: GitLabAction) {
+		let Some(remote) = self.remote.clone() else {
+			return;
+		};
+		if self.async_action.is_pending() {
+			return;
+		}
+		self.status_msg = Some("working…".to_string());
+		self.async_action
+			.spawn(AsyncActionJob::new(remote, action));
+	}
+
+	/// Close the current MR, or reopen it if closed (no-op when merged).
+	fn toggle_state(&mut self) {
+		let event = match self.current_mr().map(|m| m.state) {
+			Some(MergeRequestState::Closed) => StateEvent::Reopen,
+			Some(
+				MergeRequestState::Opened
+				| MergeRequestState::Locked,
+			) => StateEvent::Close,
+			_ => return,
+		};
+		if let Some(iid) = self.action_iid() {
+			self.spawn_action(GitLabAction::SetMergeRequestState {
+				iid,
+				event,
+			});
+		}
+	}
+
+	fn open_in_browser(&mut self) {
+		let url = self.current_mr().map(|m| m.web_url.clone());
+		let Some(url) = url.filter(|u| !u.is_empty()) else {
+			return;
+		};
+		if let Err(e) = crate::open_browser::open_in_browser(&url) {
+			self.status_msg = Some(format!("error: {e}"));
 		}
 	}
 
@@ -159,30 +313,64 @@ impl MergeRequestsTab {
 			AsyncGitLabNotification::MergeRequests => {
 				if let Some(job) = self.async_mrs.take_last() {
 					if let Some(result) = job.result() {
-						self.state = match result {
-							Ok(mrs) => LoadState::Loaded(mrs),
-							Err(e) => LoadState::Error(e),
+						self.list = match result {
+							Ok(mrs) => Load::Loaded(mrs),
+							Err(e) => Load::Error(e),
 						};
 						self.clamp_selection();
+					}
+				}
+			}
+			AsyncGitLabNotification::MrDetail => {
+				if let Some(job) = self.async_detail.take_last() {
+					if let Some(result) = job.result() {
+						self.detail = Some(match result {
+							Ok((mr, notes)) => {
+								Load::Loaded(DetailData { mr, notes })
+							}
+							Err(e) => Load::Error(e),
+						});
+					}
+				}
+			}
+			AsyncGitLabNotification::Action => {
+				if let Some(job) = self.async_action.take_last() {
+					if let Some(result) = job.result() {
+						self.status_msg = Some(match result {
+							Ok(msg) => msg,
+							Err(e) => format!("error: {e}"),
+						});
+						self.reload();
+						if self.detail_open() {
+							self.reload_detail();
+						}
 					}
 				}
 			}
 			AsyncGitLabNotification::Issues
 			| AsyncGitLabNotification::Board
 			| AsyncGitLabNotification::IssueDetail
-			| AsyncGitLabNotification::Action => {}
+			| AsyncGitLabNotification::Pipelines
+			| AsyncGitLabNotification::PipelineJobs
+			| AsyncGitLabNotification::JobTrace => {}
 		}
 	}
 
 	pub fn any_work_pending(&self) -> bool {
 		self.async_mrs.is_pending()
+			|| self.async_detail.is_pending()
+			|| self.async_action.is_pending()
 	}
 
 	fn loaded(&self) -> Option<&[MergeRequest]> {
-		match &self.state {
-			LoadState::Loaded(mrs) => Some(mrs),
+		match &self.list {
+			Load::Loaded(mrs) => Some(mrs),
 			_ => None,
 		}
+	}
+
+	fn selected_mr(&self) -> Option<&MergeRequest> {
+		self.loaded().and_then(|m| m.get(self.selection))
 	}
 
 	fn clamp_selection(&mut self) {
@@ -229,18 +417,55 @@ impl MergeRequestsTab {
 		self.remote.as_ref().map_or("", |r| r.host.as_str())
 	}
 
-	fn render_list(&self, f: &mut Frame, rect: Rect, mrs: &[MergeRequest]) {
+	fn split_footer(&self, rect: Rect) -> (Rect, Option<Rect>) {
+		if self.status_msg.is_some() {
+			let chunks = Layout::default()
+				.direction(Direction::Vertical)
+				.constraints([
+					Constraint::Min(1),
+					Constraint::Length(1),
+				])
+				.split(rect);
+			(chunks[0], Some(chunks[1]))
+		} else {
+			(rect, None)
+		}
+	}
+
+	fn draw_footer(&self, f: &mut Frame, footer: Option<Rect>) {
+		if let (Some(rect), Some(msg)) =
+			(footer, self.status_msg.as_deref())
+		{
+			f.render_widget(
+				Paragraph::new(msg)
+					.style(self.theme.text(true, false)),
+				rect,
+			);
+		}
+	}
+
+	const fn marker(mr: &MergeRequest) -> &'static str {
+		match mr.state {
+			MergeRequestState::Merged => "✓",
+			MergeRequestState::Closed => "✗",
+			_ if mr.draft => "◐",
+			_ => "●",
+		}
+	}
+
+	fn render_list(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		mrs: &[MergeRequest],
+	) {
+		let (list_area, footer) = self.split_footer(rect);
+
 		let items: Vec<ListItem> = mrs
 			.iter()
 			.enumerate()
 			.map(|(i, mr)| {
 				let selected = i == self.selection;
-				let marker = match mr.state {
-					MergeRequestState::Merged => "✓",
-					MergeRequestState::Closed => "✗",
-					_ if mr.draft => "◐",
-					_ => "●",
-				};
 				let author = mr
 					.author
 					.as_ref()
@@ -249,7 +474,8 @@ impl MergeRequestsTab {
 					});
 				let line = Line::from(vec![Span::styled(
 					format!(
-						"{marker} !{}  {}  ({} → {}){author}",
+						"{} !{}  {}  ({} → {}){author}",
+						Self::marker(mr),
 						mr.iid,
 						mr.title,
 						mr.source_branch,
@@ -266,55 +492,209 @@ impl MergeRequestsTab {
 				.borders(Borders::ALL)
 				.title(self.title()),
 		);
-		f.render_widget(list, rect);
+		f.render_widget(list, list_area);
+		self.draw_footer(f, footer);
+	}
+
+	fn render_detail(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		data: &DetailData,
+	) {
+		let (area, footer) = self.split_footer(rect);
+		let lines = self.detail_lines(data);
+		let title = format!(
+			"MR !{}  ·  [Esc] back  [n] comment  [m] merge  [a] approve  [u] unapprove  [b] rebase  [c] close/reopen  [o] open",
+			data.mr.iid
+		);
+		let block = Block::default()
+			.borders(Borders::ALL)
+			.title(title);
+		f.render_widget(
+			Paragraph::new(lines)
+				.block(block)
+				.wrap(Wrap { trim: false })
+				.scroll((self.detail_scroll, 0)),
+			area,
+		);
+		self.draw_footer(f, footer);
+	}
+
+	fn detail_lines(&self, data: &DetailData) -> Vec<Line<'static>> {
+		let style = self.theme.text(true, false);
+		let header = self.theme.text(true, true);
+		let mr = &data.mr;
+
+		let state = match mr.state {
+			MergeRequestState::Opened => "open",
+			MergeRequestState::Closed => "closed",
+			MergeRequestState::Merged => "merged",
+			MergeRequestState::Locked => "locked",
+			MergeRequestState::Unknown => "?",
+		};
+		let author = mr
+			.author
+			.as_ref()
+			.map_or_else(String::new, |a| {
+				format!("  by @{}", a.username)
+			});
+
+		let mut lines: Vec<Line> = Vec::new();
+		lines.push(Line::styled(
+			format!(
+				"{} !{}  {}",
+				Self::marker(mr),
+				mr.iid,
+				mr.title
+			),
+			header,
+		));
+		lines.push(Line::styled(
+			format!(
+				"[{state}]{}{author}   👍{}",
+				if mr.draft { "  draft" } else { "" },
+				mr.upvotes
+			),
+			style,
+		));
+		lines.push(Line::styled(
+			format!("{} → {}", mr.source_branch, mr.target_branch),
+			style,
+		));
+		if let Some(status) = &mr.detailed_merge_status {
+			lines.push(Line::styled(
+				format!("merge status: {status}"),
+				style,
+			));
+		}
+		if mr.has_conflicts {
+			lines.push(Line::styled("⚠ has conflicts", style));
+		}
+		lines.push(Line::raw(""));
+		match mr
+			.description
+			.as_deref()
+			.filter(|d| !d.trim().is_empty())
+		{
+			Some(desc) => {
+				for l in desc.lines() {
+					lines.push(Line::styled(l.to_string(), style));
+				}
+			}
+			None => {
+				lines.push(Line::styled("(no description)", style));
+			}
+		}
+
+		let comments: Vec<&Note> =
+			data.notes.iter().filter(|n| !n.system).collect();
+		lines.push(Line::raw(""));
+		lines.push(Line::styled(
+			format!("── Comments ({}) ──", comments.len()),
+			header,
+		));
+		if comments.is_empty() {
+			lines.push(Line::styled("(no comments)", style));
+		}
+		for note in comments {
+			lines.push(Line::raw(""));
+			let who = note.author.as_ref().map_or_else(
+				|| "?".to_string(),
+				|a| format!("@{}", a.username),
+			);
+			let when =
+				note.created_at.split('T').next().unwrap_or("");
+			lines.push(Line::styled(
+				format!("{who} · {when}"),
+				header,
+			));
+			for l in note.body.lines() {
+				lines.push(Line::styled(l.to_string(), style));
+			}
+		}
+
+		lines
 	}
 }
 
 impl DrawableComponent for MergeRequestsTab {
 	fn draw(&self, f: &mut Frame, rect: Rect) -> Result<()> {
-		match &self.state {
-			LoadState::NoRemote => self.draw_message(
+		if self.remote.is_none() {
+			self.draw_message(
 				f,
 				rect,
 				"No GitLab remote detected for this repository.",
-			),
-			LoadState::NeedToken => {
-				if self.token_input.is_visible() {
-					// underlying message + centered input popup on top
-					self.draw_message(
-						f,
-						rect,
-						&format!(
-							"A GitLab token is required for {}.",
-							self.host()
-						),
-					);
-					self.token_input.draw(f, rect)?;
-				} else {
-					self.draw_message(
-						f,
-						rect,
-						&strings::gitlab_token_help(
-							self.host(),
-							false,
-						),
-					);
+			);
+			return Ok(());
+		}
+
+		if !self.token_available() {
+			if self.token_input.is_visible() {
+				self.draw_message(
+					f,
+					rect,
+					&format!(
+						"A GitLab token is required for {}.",
+						self.host()
+					),
+				);
+				self.token_input.draw(f, rect)?;
+			} else if let Some(err) = &self.token_error {
+				self.draw_message(
+					f,
+					rect,
+					&format!(
+						"{err}\n\nPress [Enter] to try again."
+					),
+				);
+			} else {
+				self.draw_message(
+					f,
+					rect,
+					&strings::gitlab_token_help(self.host(), true),
+				);
+			}
+			return Ok(());
+		}
+
+		if let Some(detail) = &self.detail {
+			match detail {
+				Load::Loading => {
+					self.draw_message(f, rect, "Loading merge request…");
+				}
+				Load::Error(e) => self.draw_message(
+					f,
+					rect,
+					&format!(
+						"Failed to load merge request:\n{e}\n\nPress [Esc] to go back."
+					),
+				),
+				Load::Loaded(data) => {
+					self.render_detail(f, rect, data);
 				}
 			}
-			LoadState::Loading => {
+			if self.comment_input.is_visible() {
+				self.comment_input.draw(f, rect)?;
+			}
+			return Ok(());
+		}
+
+		match &self.list {
+			Load::Loading => {
 				self.draw_message(f, rect, "Loading merge requests…");
 			}
-			LoadState::Error(e) => self.draw_message(
+			Load::Error(e) => self.draw_message(
 				f,
 				rect,
 				&format!(
-					"Failed to load merge requests:\n{e}\n\nPress [Enter] to re-enter the token."
+					"Failed to load merge requests:\n{e}\n\nPress [r] to retry."
 				),
 			),
-			LoadState::Loaded(mrs) if mrs.is_empty() => {
+			Load::Loaded(mrs) if mrs.is_empty() => {
 				self.draw_message(f, rect, "No open merge requests.");
 			}
-			LoadState::Loaded(mrs) => self.render_list(f, rect, mrs),
+			Load::Loaded(mrs) => self.render_list(f, rect, mrs),
 		}
 
 		Ok(())
@@ -330,8 +710,24 @@ impl Component for MergeRequestsTab {
 		if self.visible || force_all {
 			out.push(CommandInfo::new(
 				strings::commands::scroll(&self.key_config),
-				self.loaded().is_some_and(|m| !m.is_empty()),
+				self.loaded().is_some_and(|m| !m.is_empty())
+					|| self.detail_open(),
 				true,
+			));
+			out.push(CommandInfo::new(
+				strings::commands::mr_open(&self.key_config),
+				self.selected_mr().is_some(),
+				self.loaded().is_some(),
+			));
+			out.push(CommandInfo::new(
+				strings::commands::mr_merge(&self.key_config),
+				self.current_mr().is_some(),
+				self.detail_open() || self.loaded().is_some(),
+			));
+			out.push(CommandInfo::new(
+				strings::commands::gitlab_browser(&self.key_config),
+				self.current_mr().is_some(),
+				self.detail_open() || self.loaded().is_some(),
 			));
 		}
 
@@ -343,37 +739,42 @@ impl Component for MergeRequestsTab {
 			return Ok(EventState::NotConsumed);
 		}
 
-		// while entering a token, the input owns all keys
-		if self.token_input.is_visible() {
-			if self.token_input.event(ev)?.is_consumed() {
-				return Ok(EventState::Consumed);
-			}
+		if let Some(state) = self.input_event(ev)? {
+			return Ok(state);
+		}
+
+		if self.detail_open() {
 			if let Event::Key(k) = ev {
-				if key_match(k, self.key_config.keys.enter) {
-					self.submit_token();
-				} else if key_match(
-					k,
-					self.key_config.keys.exit_popup,
-				) {
-					self.token_input.hide();
-				}
+				self.detail_event(k);
 			}
 			return Ok(EventState::Consumed);
 		}
 
 		if let Event::Key(k) = ev {
+			let token_missing = !self.token_available();
+
 			if key_match(k, self.key_config.keys.move_down) {
 				self.move_selection(true);
 				return Ok(EventState::Consumed);
 			} else if key_match(k, self.key_config.keys.move_up) {
 				self.move_selection(false);
 				return Ok(EventState::Consumed);
-			} else if key_match(k, self.key_config.keys.enter)
-				&& matches!(
-					self.state,
-					LoadState::NeedToken | LoadState::Error(_)
-				) {
-				self.show_token_prompt();
+			} else if key_match(k, self.key_config.keys.enter) {
+				if token_missing {
+					self.show_token_prompt();
+				} else if self.selected_mr().is_some() {
+					self.open_detail();
+				}
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('o'))
+				&& self.selected_mr().is_some()
+			{
+				self.open_in_browser();
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('r'))
+				&& !token_missing
+			{
+				self.reload();
 				return Ok(EventState::Consumed);
 			}
 		}
@@ -393,6 +794,90 @@ impl Component for MergeRequestsTab {
 		self.visible = true;
 		self.ensure_load();
 		Ok(())
+	}
+}
+
+impl MergeRequestsTab {
+	/// Route a key event to the active text input. Returns `Some(Consumed)`
+	/// when an input handled it, `None` when none is open.
+	fn input_event(
+		&mut self,
+		ev: &Event,
+	) -> Result<Option<EventState>> {
+		if self.token_input.is_visible() {
+			if !self.token_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_token();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.token_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
+		if self.comment_input.is_visible() {
+			if !self.comment_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_comment();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.comment_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
+		Ok(None)
+	}
+
+	/// Handle a key while the MR detail view is open.
+	fn detail_event(&mut self, k: &KeyEvent) {
+		if key_match(k, self.key_config.keys.exit_popup) {
+			self.close_detail();
+		} else if key_match(k, self.key_config.keys.move_down) {
+			self.scroll_detail(true);
+		} else if key_match(k, self.key_config.keys.move_up) {
+			self.scroll_detail(false);
+		} else if matches!(k.code, KeyCode::Char('n')) {
+			self.show_comment_prompt();
+		} else if matches!(k.code, KeyCode::Char('o')) {
+			self.open_in_browser();
+		} else if matches!(k.code, KeyCode::Char('m')) {
+			if let Some(iid) = self.action_iid() {
+				self.spawn_action(
+					GitLabAction::MergeMergeRequest { iid },
+				);
+			}
+		} else if matches!(k.code, KeyCode::Char('a')) {
+			if let Some(iid) = self.action_iid() {
+				self.spawn_action(
+					GitLabAction::ApproveMergeRequest { iid },
+				);
+			}
+		} else if matches!(k.code, KeyCode::Char('u')) {
+			if let Some(iid) = self.action_iid() {
+				self.spawn_action(
+					GitLabAction::UnapproveMergeRequest { iid },
+				);
+			}
+		} else if matches!(k.code, KeyCode::Char('b')) {
+			if let Some(iid) = self.action_iid() {
+				self.spawn_action(
+					GitLabAction::RebaseMergeRequest { iid },
+				);
+			}
+		} else if matches!(k.code, KeyCode::Char('c')) {
+			self.toggle_state();
+		}
 	}
 }
 
