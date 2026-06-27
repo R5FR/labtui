@@ -60,7 +60,7 @@ export GITLAB_TOKEN=your_token
 labtui
 ```
 
-Use the `Tab` / `Shift+Tab` keys (or the number keys) to navigate between tabs. The **Merge Requests** (`6`) and **Issues** (`7`) tabs appear automatically when a GitLab remote is detected. In the Issues tab, press `n` to create an issue, `c` to close the selected one, `r` to refresh, and `b` to toggle between the list and the column board view (use `←`/`→` to move between board columns).
+Use the `Tab` / `Shift+Tab` keys (or the number keys) to navigate between tabs. The **Merge Requests** (`6`) and **Issues** (`7`) tabs appear automatically when a GitLab remote is detected. In the Issues tab, press `Enter` to open an issue's detail and comment thread (`n` to add a comment, `c` to close it, `Esc` to go back), `n` to create an issue, `c` to close the selected one, `r` to refresh, and `b` to toggle between the list and the column board view (use `←`/`→` to move between board columns).
 
 ## Key Bindings
 

@@ -14,7 +14,7 @@ use crate::{
 	error::Error,
 	remote::GitLabRemote,
 	runtime,
-	types::{Issue, MergeRequest},
+	types::{Issue, MergeRequest, Note},
 };
 use asyncgit::{
 	asyncjob::{AsyncJob, RunParams},
@@ -32,6 +32,8 @@ pub enum AsyncGitLabNotification {
 	Issues,
 	/// issue board finished loading
 	Board,
+	/// a single issue's detail + notes finished loading
+	IssueDetail,
 	/// a write action (create/close/comment/merge/…) finished
 	Action,
 }
@@ -44,6 +46,10 @@ pub type IssuesResult = Result<Vec<Issue>, String>;
 
 /// Result the UI reads after the board job completes.
 pub type BoardResult = Result<Vec<BoardColumn>, String>;
+
+/// Result the UI reads after the issue-detail job completes: the issue plus
+/// its notes (comments), oldest first.
+pub type IssueDetailResult = Result<(Issue, Vec<Note>), String>;
 
 /// Result of a write action: a human-readable success message, or an error.
 pub type ActionResult = Result<String, String>;
@@ -252,6 +258,73 @@ impl AsyncJob for AsyncBoardJob {
 		}
 
 		Ok(AsyncGitLabNotification::Board)
+	}
+}
+
+enum IssueDetailJobState {
+	Request { remote: GitLabRemote, iid: u64 },
+	Response(IssueDetailResult),
+}
+
+/// Fetches a single issue plus its notes, off the UI thread.
+#[derive(Clone)]
+pub struct AsyncIssueDetailJob {
+	state: Arc<Mutex<Option<IssueDetailJobState>>>,
+}
+
+impl AsyncIssueDetailJob {
+	pub fn new(remote: GitLabRemote, iid: u64) -> Self {
+		Self {
+			state: Arc::new(Mutex::new(Some(
+				IssueDetailJobState::Request { remote, iid },
+			))),
+		}
+	}
+
+	/// Outcome of the job once finished; `None` while still pending.
+	pub fn result(&self) -> Option<IssueDetailResult> {
+		let state = self.state.lock().ok()?;
+		match state.as_ref()? {
+			IssueDetailJobState::Response(r) => Some(r.clone()),
+			IssueDetailJobState::Request { .. } => None,
+		}
+	}
+
+	fn fetch(
+		remote: &GitLabRemote,
+		iid: u64,
+	) -> Result<(Issue, Vec<Note>), Error> {
+		let client = GitLabClient::from_env(remote.clone())?;
+		runtime::block_on(async {
+			let issue = client.issue(iid).await?;
+			let notes = client.issue_notes(iid).await?;
+			Ok((issue, notes))
+		})
+	}
+}
+
+impl AsyncJob for AsyncIssueDetailJob {
+	type Notification = AsyncGitLabNotification;
+	type Progress = ();
+
+	fn run(
+		&mut self,
+		_params: RunParams<Self::Notification, Self::Progress>,
+	) -> GitResult<Self::Notification> {
+		if let Ok(mut state) = self.state.lock() {
+			*state = state.take().map(|state| match state {
+				IssueDetailJobState::Request { remote, iid } => {
+					let result = Self::fetch(&remote, iid)
+						.map_err(|e| e.to_string());
+					IssueDetailJobState::Response(result)
+				}
+				IssueDetailJobState::Response(r) => {
+					IssueDetailJobState::Response(r)
+				}
+			});
+		}
+
+		Ok(AsyncGitLabNotification::IssueDetail)
 	}
 }
 

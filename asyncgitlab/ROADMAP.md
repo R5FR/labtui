@@ -43,8 +43,8 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 | Get one | ✅ | ⬜ |
 | Create | ✅ | ✅ (`n`) |
 | Close / reopen | ✅ | ✅ close (`c`) |
-| Notes: list / add | ✅ | ⬜ |
-| Detail view + discussion thread | ⬜ | ⬜ |
+| Notes: list / add | ✅ | ✅ |
+| Detail view + discussion thread | ✅ | ✅ (`enter`) |
 | Assignees / labels / milestone editing | ⬜ | ⬜ |
 
 ## Pipelines & CI/CD

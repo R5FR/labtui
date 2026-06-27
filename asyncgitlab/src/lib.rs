@@ -28,8 +28,9 @@ pub use config::{
 pub use error::{Error, Result};
 pub use job::{
 	ActionResult, AsyncActionJob, AsyncBoardJob,
-	AsyncGitLabNotification, AsyncIssuesJob, AsyncMergeRequestsJob,
-	BoardResult, GitLabAction, IssuesResult, MergeRequestsResult,
+	AsyncGitLabNotification, AsyncIssueDetailJob, AsyncIssuesJob,
+	AsyncMergeRequestsJob, BoardResult, GitLabAction,
+	IssueDetailResult, IssuesResult, MergeRequestsResult,
 };
 pub use remote::GitLabRemote;
 pub use types::{

@@ -15,8 +15,9 @@ use asyncgit::{
 };
 use asyncgitlab::{
 	has_token, store_token, AsyncActionJob, AsyncBoardJob,
-	AsyncGitLabNotification, AsyncIssuesJob, BoardColumn, GitLabAction,
-	GitLabRemote, Issue, IssueScope, IssueState, StateEvent,
+	AsyncGitLabNotification, AsyncIssueDetailJob, AsyncIssuesJob,
+	BoardColumn, GitLabAction, GitLabRemote, Issue, IssueScope,
+	IssueState, Note, StateEvent,
 };
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
@@ -24,9 +25,15 @@ use ratatui::{
 		Alignment, Constraint, Direction, Layout, Rect,
 	},
 	text::{Line, Span},
-	widgets::{Block, Borders, List, ListItem, Paragraph},
+	widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 	Frame,
 };
+
+/// Loaded detail of a single issue: the issue plus its comment thread.
+struct DetailData {
+	issue: Issue,
+	notes: Vec<Note>,
+}
 
 /// Loading state of a fetched payload.
 enum Load<T> {
@@ -48,6 +55,12 @@ pub struct IssuesTab {
 	view: View,
 	list: Load<Vec<Issue>>,
 	board: Load<Vec<BoardColumn>>,
+	/// open issue detail view, if any
+	detail: Option<Load<DetailData>>,
+	/// iid of the issue shown in the detail view (for reloading)
+	detail_iid: Option<u64>,
+	/// scroll offset of the detail panel
+	detail_scroll: u16,
 	/// selection in the flat list view
 	selection: usize,
 	/// active column / row in the board view
@@ -59,9 +72,11 @@ pub struct IssuesTab {
 	token_error: Option<String>,
 	async_issues: AsyncSingleJob<AsyncIssuesJob>,
 	async_board: AsyncSingleJob<AsyncBoardJob>,
+	async_detail: AsyncSingleJob<AsyncIssueDetailJob>,
 	async_action: AsyncSingleJob<AsyncActionJob>,
 	token_input: TextInputComponent,
 	new_issue_input: TextInputComponent,
+	comment_input: TextInputComponent,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
 }
@@ -85,12 +100,22 @@ impl IssuesTab {
 			false,
 		);
 
+		let comment_input = TextInputComponent::new(
+			env,
+			"New comment",
+			"comment body, then press [Enter]",
+			true,
+		);
+
 		Self {
 			visible: false,
 			remote,
 			view: View::List,
 			list: Load::Loading,
 			board: Load::Loading,
+			detail: None,
+			detail_iid: None,
+			detail_scroll: 0,
 			selection: 0,
 			board_col: 0,
 			board_row: 0,
@@ -102,11 +127,15 @@ impl IssuesTab {
 			async_board: AsyncSingleJob::new(
 				env.sender_gitlab.clone(),
 			),
+			async_detail: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
 			async_action: AsyncSingleJob::new(
 				env.sender_gitlab.clone(),
 			),
 			token_input,
 			new_issue_input,
+			comment_input,
 			theme: env.theme.clone(),
 			key_config: env.key_config.clone(),
 		}
@@ -179,6 +208,75 @@ impl IssuesTab {
 		self.ensure_load();
 	}
 
+	/// Open the detail view for the currently selected issue.
+	fn open_detail(&mut self) {
+		let Some(iid) = self.selected_issue().map(|i| i.iid) else {
+			return;
+		};
+		let Some(remote) = self.remote.clone() else {
+			return;
+		};
+		self.detail_iid = Some(iid);
+		self.detail_scroll = 0;
+		self.detail = Some(Load::Loading);
+		self.async_detail
+			.spawn(AsyncIssueDetailJob::new(remote, iid));
+	}
+
+	fn close_detail(&mut self) {
+		self.detail = None;
+		self.detail_iid = None;
+		self.detail_scroll = 0;
+	}
+
+	/// Re-fetch the detail currently being shown (after a comment/close).
+	fn reload_detail(&mut self) {
+		let (Some(iid), Some(remote)) =
+			(self.detail_iid, self.remote.clone())
+		else {
+			return;
+		};
+		self.detail = Some(Load::Loading);
+		self.async_detail
+			.spawn(AsyncIssueDetailJob::new(remote, iid));
+	}
+
+	const fn detail_open(&self) -> bool {
+		self.detail.is_some()
+	}
+
+	const fn scroll_detail(&mut self, down: bool) {
+		if down {
+			self.detail_scroll = self.detail_scroll.saturating_add(1);
+		} else {
+			self.detail_scroll = self.detail_scroll.saturating_sub(1);
+		}
+	}
+
+	fn show_comment_prompt(&mut self) {
+		if !self.comment_input.is_visible() {
+			self.comment_input.clear();
+			let _ = self.comment_input.show();
+		}
+	}
+
+	/// Post the typed comment to the issue shown in the detail view.
+	fn submit_comment(&mut self) {
+		let body = self.comment_input.get_text().trim().to_string();
+		self.comment_input.clear();
+		self.comment_input.hide();
+		let Some(iid) = self.detail_iid else {
+			return;
+		};
+		if body.is_empty() {
+			return;
+		}
+		self.spawn_action(GitLabAction::CreateIssueNote {
+			iid,
+			body,
+		});
+	}
+
 	fn show_token_prompt(&mut self) {
 		if !self.token_input.is_visible() {
 			self.token_input.clear();
@@ -190,6 +288,7 @@ impl IssuesTab {
 	pub fn is_editing(&self) -> bool {
 		self.token_input.is_visible()
 			|| self.new_issue_input.is_visible()
+			|| self.comment_input.is_visible()
 	}
 
 	/// Persist the typed token to the OS keyring, then start loading.
@@ -292,6 +391,18 @@ impl IssuesTab {
 					}
 				}
 			}
+			AsyncGitLabNotification::IssueDetail => {
+				if let Some(job) = self.async_detail.take_last() {
+					if let Some(result) = job.result() {
+						self.detail = Some(match result {
+							Ok((issue, notes)) => {
+								Load::Loaded(DetailData { issue, notes })
+							}
+							Err(e) => Load::Error(e),
+						});
+					}
+				}
+			}
 			AsyncGitLabNotification::Action => {
 				if let Some(job) = self.async_action.take_last() {
 					if let Some(result) = job.result() {
@@ -300,6 +411,9 @@ impl IssuesTab {
 							Err(e) => format!("error: {e}"),
 						});
 						self.reload();
+						if self.detail_open() {
+							self.reload_detail();
+						}
 					}
 				}
 			}
@@ -310,6 +424,7 @@ impl IssuesTab {
 	pub fn any_work_pending(&self) -> bool {
 		self.async_issues.is_pending()
 			|| self.async_board.is_pending()
+			|| self.async_detail.is_pending()
 			|| self.async_action.is_pending()
 	}
 
@@ -573,6 +688,100 @@ impl IssuesTab {
 
 		self.draw_footer(f, footer);
 	}
+
+	fn render_detail(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		data: &DetailData,
+	) {
+		let (area, footer) = self.split_footer(rect);
+		let style = self.theme.text(true, false);
+		let header = self.theme.text(true, true);
+		let issue = &data.issue;
+
+		let state = match issue.state {
+			IssueState::Closed => "closed",
+			_ => "open",
+		};
+		let author = issue
+			.author
+			.as_ref()
+			.map_or_else(String::new, |a| {
+				format!("  by @{}", a.username)
+			});
+
+		let mut lines: Vec<Line> = Vec::new();
+		lines.push(Line::styled(
+			format!("#{}  {}", issue.iid, issue.title),
+			header,
+		));
+		lines.push(Line::styled(
+			format!("[{state}]{author}   👍{}", issue.upvotes),
+			style,
+		));
+		if !issue.labels.is_empty() {
+			lines.push(Line::styled(
+				format!("labels: {}", issue.labels.join(", ")),
+				style,
+			));
+		}
+		lines.push(Line::raw(""));
+		match issue
+			.description
+			.as_deref()
+			.filter(|d| !d.trim().is_empty())
+		{
+			Some(desc) => {
+				for l in desc.lines() {
+					lines.push(Line::styled(l.to_string(), style));
+				}
+			}
+			None => lines
+				.push(Line::styled("(no description)", style)),
+		}
+
+		let comments: Vec<&Note> =
+			data.notes.iter().filter(|n| !n.system).collect();
+		lines.push(Line::raw(""));
+		lines.push(Line::styled(
+			format!("── Comments ({}) ──", comments.len()),
+			header,
+		));
+		if comments.is_empty() {
+			lines.push(Line::styled("(no comments)", style));
+		}
+		for note in comments {
+			lines.push(Line::raw(""));
+			let who = note.author.as_ref().map_or_else(
+				|| "?".to_string(),
+				|a| format!("@{}", a.username),
+			);
+			let when =
+				note.created_at.split('T').next().unwrap_or("");
+			lines.push(Line::styled(
+				format!("{who} · {when}"),
+				header,
+			));
+			for l in note.body.lines() {
+				lines.push(Line::styled(l.to_string(), style));
+			}
+		}
+
+		let title = format!(
+			"Issue #{}  ·  [Esc] back  [n] comment  [c] close",
+			issue.iid
+		);
+		let block = Block::default()
+			.borders(Borders::ALL)
+			.title(title);
+		let p = Paragraph::new(lines)
+			.block(block)
+			.wrap(Wrap { trim: false })
+			.scroll((self.detail_scroll, 0));
+		f.render_widget(p, area);
+		self.draw_footer(f, footer);
+	}
 }
 
 impl DrawableComponent for IssuesTab {
@@ -612,6 +821,29 @@ impl DrawableComponent for IssuesTab {
 					rect,
 					&strings::gitlab_token_help(self.host(), true),
 				);
+			}
+			return Ok(());
+		}
+
+		// detail view takes over the whole area when open
+		if let Some(detail) = &self.detail {
+			match detail {
+				Load::Loading => {
+					self.draw_message(f, rect, "Loading issue…");
+				}
+				Load::Error(e) => self.draw_message(
+					f,
+					rect,
+					&format!(
+						"Failed to load issue:\n{e}\n\nPress [Esc] to go back."
+					),
+				),
+				Load::Loaded(data) => {
+					self.render_detail(f, rect, data);
+				}
+			}
+			if self.comment_input.is_visible() {
+				self.comment_input.draw(f, rect)?;
 			}
 			return Ok(());
 		}
@@ -696,6 +928,11 @@ impl Component for IssuesTab {
 				true,
 			));
 			out.push(CommandInfo::new(
+				strings::commands::issue_open(&self.key_config),
+				self.selected_issue().is_some(),
+				self.content_loaded(),
+			));
+			out.push(CommandInfo::new(
 				strings::commands::issue_board(&self.key_config),
 				true,
 				true,
@@ -720,38 +957,15 @@ impl Component for IssuesTab {
 			return Ok(EventState::NotConsumed);
 		}
 
-		// while entering a token, the input owns all keys
-		if self.token_input.is_visible() {
-			if self.token_input.event(ev)?.is_consumed() {
-				return Ok(EventState::Consumed);
-			}
-			if let Event::Key(k) = ev {
-				if key_match(k, self.key_config.keys.enter) {
-					self.submit_token();
-				} else if key_match(
-					k,
-					self.key_config.keys.exit_popup,
-				) {
-					self.token_input.hide();
-				}
-			}
-			return Ok(EventState::Consumed);
+		// an active text input owns all keys
+		if let Some(state) = self.input_event(ev)? {
+			return Ok(state);
 		}
 
-		// while entering a new issue title, the input owns all keys
-		if self.new_issue_input.is_visible() {
-			if self.new_issue_input.event(ev)?.is_consumed() {
-				return Ok(EventState::Consumed);
-			}
+		// the detail view owns navigation while open
+		if self.detail_open() {
 			if let Event::Key(k) = ev {
-				if key_match(k, self.key_config.keys.enter) {
-					self.submit_new_issue();
-				} else if key_match(
-					k,
-					self.key_config.keys.exit_popup,
-				) {
-					self.new_issue_input.hide();
-				}
+				self.detail_event(k);
 			}
 			return Ok(EventState::Consumed);
 		}
@@ -781,10 +995,12 @@ impl Component for IssuesTab {
 			{
 				self.move_board_col(false);
 				return Ok(EventState::Consumed);
-			} else if key_match(k, self.key_config.keys.enter)
-				&& token_missing
-			{
-				self.show_token_prompt();
+			} else if key_match(k, self.key_config.keys.enter) {
+				if token_missing {
+					self.show_token_prompt();
+				} else if self.selected_issue().is_some() {
+					self.open_detail();
+				}
 				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('b'))
 				&& !token_missing
@@ -824,6 +1040,85 @@ impl Component for IssuesTab {
 		self.visible = true;
 		self.ensure_load();
 		Ok(())
+	}
+}
+
+impl IssuesTab {
+	/// Route a key event to whichever text input is active. Returns
+	/// `Some(Consumed)` when an input handled it, `None` when none is open.
+	fn input_event(
+		&mut self,
+		ev: &Event,
+	) -> Result<Option<EventState>> {
+		if self.token_input.is_visible() {
+			if !self.token_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_token();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.token_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
+		if self.new_issue_input.is_visible() {
+			if !self.new_issue_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_new_issue();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.new_issue_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
+		if self.comment_input.is_visible() {
+			if !self.comment_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_comment();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.comment_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
+		Ok(None)
+	}
+
+	/// Handle a key while the issue detail view is open.
+	fn detail_event(&mut self, k: &crossterm::event::KeyEvent) {
+		if key_match(k, self.key_config.keys.exit_popup) {
+			self.close_detail();
+		} else if key_match(k, self.key_config.keys.move_down) {
+			self.scroll_detail(true);
+		} else if key_match(k, self.key_config.keys.move_up) {
+			self.scroll_detail(false);
+		} else if matches!(k.code, KeyCode::Char('n')) {
+			self.show_comment_prompt();
+		} else if matches!(k.code, KeyCode::Char('c')) {
+			if let Some(iid) = self.detail_iid {
+				self.spawn_action(GitLabAction::SetIssueState {
+					iid,
+					event: StateEvent::Close,
+				});
+			}
+		}
 	}
 }
 

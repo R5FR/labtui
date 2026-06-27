@@ -682,6 +682,13 @@ pub mod commands {
 			CMD_GROUP_GENERAL,
 		)
 	}
+	pub fn issue_open(_key_config: &SharedKeyConfig) -> CommandText {
+		CommandText::new(
+			"Open [enter]".to_string(),
+			"open the selected issue's detail and comments",
+			CMD_GROUP_GITLAB,
+		)
+	}
 	pub fn issue_board(_key_config: &SharedKeyConfig) -> CommandText {
 		CommandText::new(
 			"List/Board [b]".to_string(),
