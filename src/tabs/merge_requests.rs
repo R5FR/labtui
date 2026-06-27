@@ -109,7 +109,6 @@ impl MergeRequestsTab {
 			}
 		} else {
 			self.state = LoadState::NeedToken;
-			self.show_token_prompt();
 		}
 	}
 
