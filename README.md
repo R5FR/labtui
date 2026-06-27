@@ -64,9 +64,9 @@ labtui
 
 Use the `Tab` / `Shift+Tab` keys (or the number keys) to navigate between tabs. The **Merge Requests** (`6`), **Issues** (`7`) and **CI** (`8`) tabs appear automatically when a GitLab remote is detected.
 
-- **Issues** (`7`): `Enter` opens the detail + comment thread (`n` comment, `c` close/reopen, `o` browser, `Esc` back); in the list, `n` creates an issue, `c` closes/reopens, `r` refreshes, `b` toggles the board view (`←`/`→` between columns, `[`/`]` between boards).
-- **Merge Requests** (`6`): `Enter` opens the detail; from there `m` merge, `a`/`u` approve/unapprove, `b` rebase, `c` close/reopen, `n` comment, `o` browser. In the list, `o` opens in browser and `r` refreshes.
-- **CI** (`8`): `Enter` drills pipelines → jobs → trace; `t` retries, `x` cancels, `o` opens in browser, `Esc` goes back up, `r` refreshes.
+- **Issues** (`7`): `Enter` opens the detail + comment thread (`n` comment, `l` edit labels, `c` close/reopen, `o` browser, `Esc` back); in the list, `n` creates an issue, `c` closes/reopens, `l` edits labels, `f` filters, `r` refreshes, `b` toggles the board view (`←`/`→` between columns, `[`/`]` between boards).
+- **Merge Requests** (`6`): `Enter` opens the detail; from there `d` view the diff, `l` edit labels, `m` merge, `a`/`u` approve/unapprove, `b` rebase, `c` close/reopen, `n` comment, `o` browser. In the list, `f` filters, `o` opens in browser, `r` refreshes; the CI status of each MR's head pipeline is shown.
+- **CI** (`8`): `Enter` drills pipelines → jobs → trace; `t` retries, `x` cancels, `p` runs a new pipeline, `c` toggles to the **commits** view (commit → `Enter` shows its CI statuses), `o` opens in browser, `Esc` goes back up, `r` refreshes.
 
 ## Key Bindings
 

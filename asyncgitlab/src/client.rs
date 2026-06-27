@@ -3,7 +3,10 @@
 use crate::{
 	error::{Error, Result},
 	remote::GitLabRemote,
-	types::{Board, Issue, Job, MergeRequest, Note, Pipeline},
+	types::{
+		Board, Branch, Commit, CommitStatus, Issue, Job,
+		MergeRequest, MrChanges, Note, Pipeline, Tag,
+	},
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde_json::{json, Value};
@@ -314,6 +317,30 @@ impl GitLabClient {
 		.await
 	}
 
+	/// The changed files (diffs) of a merge request.
+	pub async fn merge_request_changes(
+		&self,
+		iid: u64,
+	) -> Result<MrChanges> {
+		self.get_json(&self.project_url(&format!(
+			"/merge_requests/{iid}/changes"
+		)))
+		.await
+	}
+
+	/// Replace the labels of a merge request (comma-separated names).
+	pub async fn set_merge_request_labels(
+		&self,
+		iid: u64,
+		labels: &str,
+	) -> Result<MergeRequest> {
+		self.put_json(
+			&self.project_url(&format!("/merge_requests/{iid}")),
+			&json!({ "labels": labels }),
+		)
+		.await
+	}
+
 	// ---- issues -----------------------------------------------------------
 
 	/// List issues for the project.
@@ -382,6 +409,60 @@ impl GitLabClient {
 			&self.project_url(&format!("/issues/{iid}/notes")),
 			&json!({ "body": body }),
 		)
+		.await
+	}
+
+	/// Replace the labels of an issue (comma-separated names).
+	pub async fn set_issue_labels(
+		&self,
+		iid: u64,
+		labels: &str,
+	) -> Result<Issue> {
+		self.put_json(
+			&self.project_url(&format!("/issues/{iid}")),
+			&json!({ "labels": labels }),
+		)
+		.await
+	}
+
+	// ---- repository: branches / tags / commits ---------------------------
+
+	/// List repository branches.
+	pub async fn branches(&self) -> Result<Vec<Branch>> {
+		self.get_paginated(&self.project_url(
+			"/repository/branches",
+		))
+		.await
+	}
+
+	/// List repository tags.
+	pub async fn tags(&self) -> Result<Vec<Tag>> {
+		self.get_paginated(&self.project_url("/repository/tags"))
+			.await
+	}
+
+	/// List recent commits, optionally for a given ref, with pipeline status.
+	pub async fn commits(
+		&self,
+		git_ref: Option<&str>,
+	) -> Result<Vec<Commit>> {
+		let suffix = match git_ref {
+			Some(r) => format!(
+				"/repository/commits?with_stats=false&ref_name={r}"
+			),
+			None => "/repository/commits".to_string(),
+		};
+		self.get_paginated(&self.project_url(&suffix)).await
+	}
+
+	/// Statuses (external CI states) attached to a commit.
+	pub async fn commit_statuses(
+		&self,
+		sha: &str,
+	) -> Result<Vec<CommitStatus>> {
+		self.get_paginated(&self.project_url(&format!(
+			"/repository/commits/{sha}/statuses"
+		)))
 		.await
 	}
 

@@ -14,8 +14,9 @@ use asyncgit::{
 	sync::{get_default_remote, get_remote_url, RepoPathRef},
 };
 use asyncgitlab::{
-	has_token, store_token, AsyncActionJob, AsyncGitLabNotification,
-	AsyncPipelineJobsJob, AsyncPipelinesJob, AsyncTraceJob, CiStatus,
+	has_token, store_token, AsyncActionJob, AsyncCommitStatusesJob,
+	AsyncCommitsJob, AsyncGitLabNotification, AsyncPipelineJobsJob,
+	AsyncPipelinesJob, AsyncTraceJob, CiStatus, Commit, CommitStatus,
 	GitLabAction, GitLabRemote, Job, Pipeline,
 };
 use crossterm::event::{Event, KeyCode, KeyEvent};
@@ -35,6 +36,8 @@ enum Load<T> {
 pub struct PipelinesTab {
 	visible: bool,
 	remote: Option<GitLabRemote>,
+	/// which top-level section is shown
+	section: Section,
 	pipelines: Load<Vec<Pipeline>>,
 	pl_selection: usize,
 	/// jobs of the opened pipeline, if drilled in
@@ -45,15 +48,29 @@ pub struct PipelinesTab {
 	trace: Option<Load<String>>,
 	trace_job_id: Option<u64>,
 	trace_scroll: u16,
+	/// recent commits (Commits section)
+	commits: Load<Vec<Commit>>,
+	commit_selection: usize,
+	/// statuses of the opened commit, if drilled in
+	statuses: Option<Load<Vec<CommitStatus>>>,
 	status_msg: Option<String>,
 	token_error: Option<String>,
 	async_pipelines: AsyncSingleJob<AsyncPipelinesJob>,
 	async_jobs: AsyncSingleJob<AsyncPipelineJobsJob>,
 	async_trace: AsyncSingleJob<AsyncTraceJob>,
+	async_commits: AsyncSingleJob<AsyncCommitsJob>,
+	async_statuses: AsyncSingleJob<AsyncCommitStatusesJob>,
 	async_action: AsyncSingleJob<AsyncActionJob>,
 	token_input: TextInputComponent,
+	branch_input: TextInputComponent,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Section {
+	Pipelines,
+	Commits,
 }
 
 impl PipelinesTab {
@@ -68,9 +85,17 @@ impl PipelinesTab {
 		)
 		.with_input_type(InputType::Password);
 
+		let branch_input = TextInputComponent::new(
+			env,
+			"Run pipeline",
+			"branch/ref to run a pipeline on, then [Enter]",
+			false,
+		);
+
 		Self {
 			visible: false,
 			remote,
+			section: Section::Pipelines,
 			pipelines: Load::Loading,
 			pl_selection: 0,
 			jobs: None,
@@ -79,6 +104,9 @@ impl PipelinesTab {
 			trace: None,
 			trace_job_id: None,
 			trace_scroll: 0,
+			commits: Load::Loading,
+			commit_selection: 0,
+			statuses: None,
 			status_msg: None,
 			token_error: None,
 			async_pipelines: AsyncSingleJob::new(
@@ -90,10 +118,17 @@ impl PipelinesTab {
 			async_trace: AsyncSingleJob::new(
 				env.sender_gitlab.clone(),
 			),
+			async_commits: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
+			async_statuses: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
 			async_action: AsyncSingleJob::new(
 				env.sender_gitlab.clone(),
 			),
 			token_input,
+			branch_input,
 			theme: env.theme.clone(),
 			key_config: env.key_config.clone(),
 		}
@@ -124,22 +159,104 @@ impl PipelinesTab {
 		if self.async_action.is_pending() {
 			return;
 		}
-		if matches!(self.pipelines, Load::Loading)
-			&& !self.async_pipelines.is_pending()
-		{
-			self.async_pipelines
-				.spawn(AsyncPipelinesJob::new(remote));
+		match self.section {
+			Section::Pipelines => {
+				if matches!(self.pipelines, Load::Loading)
+					&& !self.async_pipelines.is_pending()
+				{
+					self.async_pipelines
+						.spawn(AsyncPipelinesJob::new(remote));
+				}
+			}
+			Section::Commits => {
+				if matches!(self.commits, Load::Loading)
+					&& !self.async_commits.is_pending()
+				{
+					self.async_commits
+						.spawn(AsyncCommitsJob::new(remote));
+				}
+			}
 		}
 	}
 
 	fn reload(&mut self) {
-		match self.level() {
-			Level::Trace => self.reload_trace(),
-			Level::Jobs => self.reload_jobs(),
-			Level::Pipelines => {
-				self.pipelines = Load::Loading;
-				self.ensure_load();
+		match self.section {
+			Section::Pipelines => match self.level() {
+				Level::Trace => self.reload_trace(),
+				Level::Jobs => self.reload_jobs(),
+				Level::Pipelines => {
+					self.pipelines = Load::Loading;
+					self.ensure_load();
+				}
+			},
+			Section::Commits => {
+				if self.statuses.is_some() {
+					self.reload_statuses();
+				} else {
+					self.commits = Load::Loading;
+					self.ensure_load();
+				}
 			}
+		}
+	}
+
+	fn toggle_section(&mut self) {
+		self.section = match self.section {
+			Section::Pipelines => Section::Commits,
+			Section::Commits => Section::Pipelines,
+		};
+		self.ensure_load();
+	}
+
+	fn commits_slice(&self) -> Option<&[Commit]> {
+		match &self.commits {
+			Load::Loaded(c) => Some(c),
+			_ => None,
+		}
+	}
+
+	fn selected_commit(&self) -> Option<&Commit> {
+		self.commits_slice().and_then(|c| c.get(self.commit_selection))
+	}
+
+	fn open_statuses(&mut self) {
+		let (Some(sha), Some(remote)) = (
+			self.selected_commit().map(|c| c.id.clone()),
+			self.remote.clone(),
+		) else {
+			return;
+		};
+		self.statuses = Some(Load::Loading);
+		self.async_statuses
+			.spawn(AsyncCommitStatusesJob::new(remote, sha));
+	}
+
+	fn reload_statuses(&mut self) {
+		let (Some(sha), Some(remote)) = (
+			self.selected_commit().map(|c| c.id.clone()),
+			self.remote.clone(),
+		) else {
+			return;
+		};
+		self.statuses = Some(Load::Loading);
+		self.async_statuses
+			.spawn(AsyncCommitStatusesJob::new(remote, sha));
+	}
+
+	/// Trigger a new pipeline on the typed ref.
+	fn submit_branch(&mut self) {
+		let git_ref = self.branch_input.get_text().trim().to_string();
+		self.branch_input.hide();
+		if git_ref.is_empty() {
+			return;
+		}
+		self.spawn_action(GitLabAction::CreatePipeline { git_ref });
+	}
+
+	fn show_branch_prompt(&mut self) {
+		if !self.branch_input.is_visible() {
+			self.branch_input.clear();
+			let _ = self.branch_input.show();
 		}
 	}
 
@@ -152,6 +269,7 @@ impl PipelinesTab {
 
 	pub fn is_editing(&self) -> bool {
 		self.token_input.is_visible()
+			|| self.branch_input.is_visible()
 	}
 
 	fn submit_token(&mut self) {
@@ -379,6 +497,27 @@ impl PipelinesTab {
 					}
 				}
 			}
+			AsyncGitLabNotification::Commits => {
+				if let Some(job) = self.async_commits.take_last() {
+					if let Some(result) = job.result() {
+						self.commits = match result {
+							Ok(c) => Load::Loaded(c),
+							Err(e) => Load::Error(e),
+						};
+						self.clamp_commit();
+					}
+				}
+			}
+			AsyncGitLabNotification::CommitStatuses => {
+				if let Some(job) = self.async_statuses.take_last() {
+					if let Some(result) = job.result() {
+						self.statuses = Some(match result {
+							Ok(s) => Load::Loaded(s),
+							Err(e) => Load::Error(e),
+						});
+					}
+				}
+			}
 			AsyncGitLabNotification::Action => {
 				if let Some(job) = self.async_action.take_last() {
 					if let Some(result) = job.result() {
@@ -398,6 +537,8 @@ impl PipelinesTab {
 		self.async_pipelines.is_pending()
 			|| self.async_jobs.is_pending()
 			|| self.async_trace.is_pending()
+			|| self.async_commits.is_pending()
+			|| self.async_statuses.is_pending()
 			|| self.async_action.is_pending()
 	}
 
@@ -412,7 +553,22 @@ impl PipelinesTab {
 			self.job_selection.min(len.saturating_sub(1));
 	}
 
+	fn clamp_commit(&mut self) {
+		let len = self.commits_slice().map_or(0, <[_]>::len);
+		self.commit_selection =
+			self.commit_selection.min(len.saturating_sub(1));
+	}
+
 	fn move_selection(&mut self, down: bool) {
+		if self.section == Section::Commits {
+			if self.statuses.is_some() {
+				return; // statuses list: no row selection
+			}
+			let len = self.commits_slice().map_or(0, <[_]>::len);
+			self.commit_selection =
+				step(self.commit_selection, len, down);
+			return;
+		}
 		match self.level() {
 			Level::Pipelines => {
 				let len =
@@ -518,7 +674,7 @@ impl PipelinesTab {
 				Block::default()
 					.borders(Borders::ALL)
 					.title(format!(
-						"{}  ·  [enter] jobs  [t] retry  [x] cancel  [o] open  [r] refresh",
+						"{}  ·  [enter] jobs  [t] retry  [x] cancel  [p] run  [c] commits  [o] open  [r] refresh",
 						self.title()
 					)),
 			),
@@ -579,6 +735,120 @@ impl PipelinesTab {
 		);
 		self.draw_footer(f, footer);
 	}
+
+	fn render_commits(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		commits: &[Commit],
+	) {
+		let (area, footer) = self.split_footer(rect);
+		let items: Vec<ListItem> = commits
+			.iter()
+			.enumerate()
+			.map(|(i, c)| {
+				let ci = c.last_pipeline.as_ref().map_or_else(
+					|| "·".to_string(),
+					|p| ci_marker(p.status).to_string(),
+				);
+				let short = if c.short_id.is_empty() {
+					c.id.chars().take(8).collect::<String>()
+				} else {
+					c.short_id.clone()
+				};
+				ListItem::new(Line::from(vec![Span::styled(
+					format!("{ci} {short}  {}", c.title),
+					self.theme.text(
+						true,
+						i == self.commit_selection,
+					),
+				)]))
+			})
+			.collect();
+		f.render_widget(
+			List::new(items).block(
+				Block::default().borders(Borders::ALL).title(
+					"Commits  ·  [enter] statuses  [c] pipelines  [o] open  [r] refresh",
+				),
+			),
+			area,
+		);
+		self.draw_footer(f, footer);
+	}
+
+	fn render_statuses(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		statuses: &[CommitStatus],
+	) {
+		let (area, footer) = self.split_footer(rect);
+		let style = self.theme.text(true, false);
+		let mut lines: Vec<Line> = Vec::new();
+		if statuses.is_empty() {
+			lines.push(Line::styled("(no statuses)", style));
+		}
+		for s in statuses {
+			let desc = s
+				.description
+				.as_deref()
+				.filter(|d| !d.is_empty())
+				.map_or_else(String::new, |d| format!("  — {d}"));
+			lines.push(Line::styled(
+				format!(
+					"{} {}  [{}]{desc}",
+					ci_marker(s.status),
+					s.name,
+					status_label(s.status),
+				),
+				style,
+			));
+		}
+		f.render_widget(
+			Paragraph::new(lines)
+				.block(
+					Block::default().borders(Borders::ALL).title(
+						"Commit statuses  ·  [esc] back",
+					),
+				)
+				.wrap(Wrap { trim: false }),
+			area,
+		);
+		self.draw_footer(f, footer);
+	}
+
+	fn draw_commits(&self, f: &mut Frame, rect: Rect) {
+		if let Some(st) = &self.statuses {
+			match st {
+				Load::Loading => {
+					self.draw_message(f, rect, "Loading statuses…");
+				}
+				Load::Error(e) => self.draw_message(
+					f,
+					rect,
+					&format!("Failed to load statuses:\n{e}"),
+				),
+				Load::Loaded(s) => self.render_statuses(f, rect, s),
+			}
+			return;
+		}
+		match &self.commits {
+			Load::Loading => {
+				self.draw_message(f, rect, "Loading commits…");
+			}
+			Load::Error(e) => self.draw_message(
+				f,
+				rect,
+				&format!(
+					"Failed to load commits:\n{e}\n\nPress [r] to retry."
+				),
+			),
+			Load::Loaded(c) if c.is_empty() => {
+				self.draw_message(f, rect, "No commits.");
+			}
+			Load::Loaded(c) => self.render_commits(f, rect, c),
+		}
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -631,40 +901,14 @@ const fn status_label(status: CiStatus) -> &'static str {
 
 impl DrawableComponent for PipelinesTab {
 	fn draw(&self, f: &mut Frame, rect: Rect) -> Result<()> {
-		if self.remote.is_none() {
-			self.draw_message(
-				f,
-				rect,
-				"No GitLab remote detected for this repository.",
-			);
+		if self.draw_gate(f, rect)? {
 			return Ok(());
 		}
 
-		if !self.token_available() {
-			if self.token_input.is_visible() {
-				self.draw_message(
-					f,
-					rect,
-					&format!(
-						"A GitLab token is required for {}.",
-						self.host()
-					),
-				);
-				self.token_input.draw(f, rect)?;
-			} else if let Some(err) = &self.token_error {
-				self.draw_message(
-					f,
-					rect,
-					&format!(
-						"{err}\n\nPress [Enter] to try again."
-					),
-				);
-			} else {
-				self.draw_message(
-					f,
-					rect,
-					&strings::gitlab_token_help(self.host(), true),
-				);
+		if self.section == Section::Commits {
+			self.draw_commits(f, rect);
+			if self.branch_input.is_visible() {
+				self.branch_input.draw(f, rect)?;
 			}
 			return Ok(());
 		}
@@ -717,12 +961,16 @@ impl DrawableComponent for PipelinesTab {
 					),
 				),
 				Load::Loaded(p) if p.is_empty() => {
-					self.draw_message(f, rect, "No pipelines.");
+					self.draw_message(f, rect, "No pipelines.  Press [c] for commits, [p] to run one.");
 				}
 				Load::Loaded(p) => {
 					self.render_pipelines(f, rect, p);
 				}
 			},
+		}
+
+		if self.branch_input.is_visible() {
+			self.branch_input.draw(f, rect)?;
 		}
 
 		Ok(())
@@ -788,6 +1036,22 @@ impl Component for PipelinesTab {
 			return Ok(EventState::Consumed);
 		}
 
+		if self.branch_input.is_visible() {
+			if !self.branch_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_branch();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.branch_input.hide();
+					}
+				}
+			}
+			return Ok(EventState::Consumed);
+		}
+
 		if let Event::Key(k) = ev {
 			if self.key_event(k) {
 				return Ok(EventState::Consumed);
@@ -813,9 +1077,62 @@ impl Component for PipelinesTab {
 }
 
 impl PipelinesTab {
+	/// Draw the no-remote / token screens. Returns `true` when handled.
+	fn draw_gate(&self, f: &mut Frame, rect: Rect) -> Result<bool> {
+		if self.remote.is_none() {
+			self.draw_message(
+				f,
+				rect,
+				"No GitLab remote detected for this repository.",
+			);
+			return Ok(true);
+		}
+		if !self.token_available() {
+			if self.token_input.is_visible() {
+				self.draw_message(
+					f,
+					rect,
+					&format!(
+						"A GitLab token is required for {}.",
+						self.host()
+					),
+				);
+				self.token_input.draw(f, rect)?;
+			} else if let Some(err) = &self.token_error {
+				self.draw_message(
+					f,
+					rect,
+					&format!("{err}\n\nPress [Enter] to try again."),
+				);
+			} else {
+				self.draw_message(
+					f,
+					rect,
+					&strings::gitlab_token_help(self.host(), true),
+				);
+			}
+			return Ok(true);
+		}
+		Ok(false)
+	}
+
 	/// Returns true when the key was consumed.
 	fn key_event(&mut self, k: &KeyEvent) -> bool {
 		let token_missing = !self.token_available();
+
+		// section toggle and pipeline trigger work everywhere
+		if matches!(k.code, KeyCode::Char('c')) && !token_missing {
+			self.toggle_section();
+			return true;
+		}
+		if matches!(k.code, KeyCode::Char('p')) && !token_missing {
+			self.show_branch_prompt();
+			return true;
+		}
+
+		if self.section == Section::Commits {
+			return self.commits_key_event(k, token_missing);
+		}
 
 		if key_match(k, self.key_config.keys.move_down) {
 			self.move_selection(true);
@@ -842,6 +1159,47 @@ impl PipelinesTab {
 		} else if matches!(k.code, KeyCode::Char('o')) {
 			self.open_in_browser();
 		} else if matches!(k.code, KeyCode::Char('r')) && !token_missing
+		{
+			self.reload();
+		} else {
+			return false;
+		}
+		true
+	}
+
+	fn commits_key_event(
+		&mut self,
+		k: &KeyEvent,
+		token_missing: bool,
+	) -> bool {
+		if key_match(k, self.key_config.keys.move_down) {
+			self.move_selection(true);
+		} else if key_match(k, self.key_config.keys.move_up) {
+			self.move_selection(false);
+		} else if key_match(k, self.key_config.keys.exit_popup)
+			&& self.statuses.is_some()
+		{
+			self.statuses = None;
+		} else if key_match(k, self.key_config.keys.enter)
+			&& !token_missing
+			&& self.statuses.is_none()
+		{
+			self.open_statuses();
+		} else if matches!(k.code, KeyCode::Char('o')) {
+			if let Some(url) = self
+				.selected_commit()
+				.and_then(|c| c.last_pipeline.as_ref())
+				.map(|p| p.web_url.clone())
+				.filter(|u| !u.is_empty())
+			{
+				if let Err(e) =
+					crate::open_browser::open_in_browser(&url)
+				{
+					self.status_msg = Some(format!("error: {e}"));
+				}
+			}
+		} else if matches!(k.code, KeyCode::Char('r'))
+			&& !token_missing
 		{
 			self.reload();
 		} else {

@@ -28,17 +28,21 @@ pub use config::{
 pub use error::{Error, Result};
 pub use job::{
 	ActionResult, AsyncActionJob, AsyncBoardJob,
-	AsyncGitLabNotification, AsyncIssueDetailJob, AsyncIssuesJob,
-	AsyncMergeRequestsJob, AsyncMrDetailJob, AsyncPipelineJobsJob,
-	AsyncPipelinesJob, AsyncTraceJob, BoardResult, GitLabAction,
+	AsyncCommitStatusesJob, AsyncCommitsJob, AsyncGitLabNotification,
+	AsyncIssueDetailJob, AsyncIssuesJob, AsyncMergeRequestsJob,
+	AsyncMrChangesJob, AsyncMrDetailJob, AsyncPipelineJobsJob,
+	AsyncPipelinesJob, AsyncTraceJob, BoardResult,
+	CommitStatusesResult, CommitsResult, GitLabAction,
 	IssueDetailResult, IssuesResult, MergeRequestsResult,
-	MrDetailResult, PipelineJobsResult, PipelinesResult, TraceResult,
+	MrChangesResult, MrDetailResult, PipelineJobsResult,
+	PipelinesResult, TraceResult,
 };
 pub use remote::GitLabRemote;
 pub use types::{
-	Board, BoardList, CiStatus, Issue, IssueState, Job, Label,
-	MergeRequest, MergeRequestState, Note, Pipeline, PipelineStatus,
-	User,
+	Board, BoardList, Branch, ChangedFile, CiStatus, Commit,
+	CommitRef, CommitStatus, Issue, IssueState, Job, Label,
+	MergeRequest, MergeRequestState, MrChanges, Note, Pipeline,
+	PipelineStatus, Tag, User,
 };
 
 /// Build a client straight from a git remote URL, using a token from the

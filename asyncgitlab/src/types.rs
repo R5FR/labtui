@@ -42,6 +42,10 @@ pub struct MergeRequest {
 	pub detailed_merge_status: Option<String>,
 	#[serde(default)]
 	pub has_conflicts: bool,
+	#[serde(default)]
+	pub labels: Vec<String>,
+	#[serde(default)]
+	pub head_pipeline: Option<Pipeline>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -155,6 +159,93 @@ pub struct Pipeline {
 	pub r#ref: Option<String>,
 	#[serde(default)]
 	pub sha: Option<String>,
+}
+
+/// A file changed by a merge request, with its unified diff.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChangedFile {
+	#[serde(default)]
+	pub old_path: String,
+	pub new_path: String,
+	#[serde(default)]
+	pub new_file: bool,
+	#[serde(default)]
+	pub deleted_file: bool,
+	#[serde(default)]
+	pub renamed_file: bool,
+	/// unified diff text for this file
+	#[serde(default)]
+	pub diff: String,
+}
+
+/// The set of changes (diffs) of a merge request.
+#[derive(Debug, Clone, Deserialize)]
+pub struct MrChanges {
+	#[serde(default)]
+	pub changes: Vec<ChangedFile>,
+}
+
+/// A repository branch (GitLab API view).
+#[derive(Debug, Clone, Deserialize)]
+pub struct Branch {
+	pub name: String,
+	#[serde(default)]
+	pub merged: bool,
+	#[serde(default)]
+	pub protected: bool,
+	#[serde(default)]
+	pub default: bool,
+	#[serde(default)]
+	pub commit: Option<CommitRef>,
+}
+
+/// A lightweight commit reference embedded in other objects.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommitRef {
+	pub id: String,
+	#[serde(default)]
+	pub short_id: String,
+	#[serde(default)]
+	pub title: String,
+}
+
+/// A repository tag.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Tag {
+	pub name: String,
+	#[serde(default)]
+	pub message: Option<String>,
+	#[serde(default)]
+	pub commit: Option<CommitRef>,
+}
+
+/// A repository commit with its latest pipeline status, when available.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Commit {
+	pub id: String,
+	#[serde(default)]
+	pub short_id: String,
+	#[serde(default)]
+	pub title: String,
+	#[serde(default)]
+	pub author_name: String,
+	#[serde(default)]
+	pub created_at: String,
+	#[serde(default)]
+	pub last_pipeline: Option<Pipeline>,
+}
+
+/// A commit status (external CI / pipeline state on a commit).
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommitStatus {
+	pub id: u64,
+	#[serde(default)]
+	pub name: String,
+	pub status: CiStatus,
+	#[serde(default)]
+	pub description: Option<String>,
+	#[serde(default)]
+	pub target_url: Option<String>,
 }
 
 /// A single CI job within a pipeline.

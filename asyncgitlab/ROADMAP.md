@@ -24,6 +24,7 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 | Capability | Library | UI |
 |---|---|---|
 | List (opened / all) | ✅ | ✅ |
+| Filter (title/branch/author/label) | — | ✅ (`f`) |
 | Get one | ✅ | ✅ |
 | Create | ✅ | 🟡 |
 | Merge | ✅ | ✅ (`m`) |
@@ -31,49 +32,62 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 | Approve / unapprove | ✅ | ✅ (`a`/`u`) |
 | Rebase | ✅ | ✅ (`b`) |
 | Notes: list / add | ✅ | ✅ |
+| Label editing | ✅ | ✅ (`l`) |
+| CI / head pipeline badge | ✅ | ✅ (list + detail) |
 | Detail view + discussion thread | ✅ | ✅ (`enter`) |
 | Open in browser | ✅ | ✅ (`o`) |
-| Diff / changes view | ⬜ | ⬜ |
+| Diff / changes view | ✅ | ✅ (`d`) |
 
 ## Issues (priority)
 
 | Capability | Library | UI |
 |---|---|---|
 | List (opened / all) | ✅ | ✅ |
+| Filter (title/author/label) | — | ✅ (`f`) |
 | Board view (columns by label, switchable) | ✅ | ✅ (`b`, `[`/`]`) |
 | Get one | ✅ | ✅ |
 | Create | ✅ | ✅ (`n`) |
 | Close / reopen | ✅ | ✅ (`c`) |
 | Notes: list / add | ✅ | ✅ |
+| Label editing | ✅ | ✅ (`l`) |
 | Detail view + discussion thread | ✅ | ✅ (`enter`) |
 | Open in browser | ✅ | ✅ (`o`) |
-| Assignees / labels / milestone editing | ⬜ | ⬜ |
+| Assignees / milestone editing | ⬜ | ⬜ |
 
 ## Pipelines & CI/CD
 
 | Capability | Library | UI |
 |---|---|---|
-| Latest pipeline (CI badge) | ✅ | ⬜ |
+| Latest pipeline (CI badge) | ✅ | ✅ (on MRs) |
 | List pipelines | ✅ | ✅ (CI tab) |
 | Pipeline jobs | ✅ | ✅ (`enter`) |
 | Job trace (logs) | ✅ | ✅ (`enter`) |
-| Create / retry / cancel pipeline | ✅ | ✅ retry/cancel (`t`/`x`) |
+| Create pipeline | ✅ | ✅ (`p`) |
+| Retry / cancel pipeline | ✅ | ✅ (`t`/`x`) |
 | Retry / cancel job | ✅ | ✅ (`t`/`x`) |
 | Open in browser | ✅ | ✅ (`o`) |
 
+## Repository
+
+| Capability | Library | UI |
+|---|---|---|
+| Branches | ✅ | ⬜ (local git tab exists) |
+| Tags | ✅ | ⬜ (local git tab exists) |
+| Commits (with CI status) | ✅ | ✅ (CI tab, `c`) |
+| Commit statuses | ✅ | ✅ (`enter` on a commit) |
+
 ## Not yet started (library or UI)
 
-- MR diff / changes view
-- Issue/MR assignees, labels, milestone editing; list filtering
-- Pipeline filtering by current branch; trigger a new pipeline from the UI
-- Branches / tags / commits via API, commit statuses
-- Members, labels, milestones (for filtering & assignment)
-- Project metadata / settings, environments, deployments
+- Issue/MR assignee & milestone editing (needs member/milestone pickers)
+- Server-side filtering & saved filters (current filter is client-side)
+- Syntax-highlighted MR diff (currently raw unified diff)
+- Branches / tags dedicated GitLab UI (local-git tabs already cover most needs)
+- Members, project metadata / settings, environments, deployments
 - Releases, packages, container registry, snippets, wiki
 
 ## Suggested next steps
 
-1. **MR diff view** — show the changed files / diff of a merge request.
-2. **Filtering** — filter issues/MRs by label, assignee, milestone; filter
-   pipelines by the current branch.
-3. **Issue/MR editing** — assignees, labels, milestone.
+1. **Assignee / milestone editing** — add member & milestone pickers, then
+   wire `assignee_ids` / `milestone_id` updates.
+2. **Syntax highlighting** in the MR diff view (reuse gitui's diff renderer).
+3. **Server-side filters** for very large projects.

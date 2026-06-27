@@ -14,7 +14,10 @@ use crate::{
 	error::Error,
 	remote::GitLabRemote,
 	runtime,
-	types::{Issue, Job, MergeRequest, Note, Pipeline},
+	types::{
+		Commit, CommitStatus, Issue, Job, MergeRequest, MrChanges,
+		Note, Pipeline,
+	},
 };
 use asyncgit::{
 	asyncjob::{AsyncJob, RunParams},
@@ -42,6 +45,12 @@ pub enum AsyncGitLabNotification {
 	PipelineJobs,
 	/// a job's trace (log) finished loading
 	JobTrace,
+	/// a merge request's changes (diff) finished loading
+	MrChanges,
+	/// the commit list finished loading
+	Commits,
+	/// a commit's statuses finished loading
+	CommitStatuses,
 	/// a write action (create/close/comment/merge/…) finished
 	Action,
 }
@@ -71,6 +80,15 @@ pub type PipelineJobsResult = Result<Vec<Job>, String>;
 
 /// Result the UI reads after the job-trace job completes.
 pub type TraceResult = Result<String, String>;
+
+/// Result the UI reads after the MR-changes job completes.
+pub type MrChangesResult = Result<MrChanges, String>;
+
+/// Result the UI reads after the commits job completes.
+pub type CommitsResult = Result<Vec<Commit>, String>;
+
+/// Result the UI reads after the commit-statuses job completes.
+pub type CommitStatusesResult = Result<Vec<CommitStatus>, String>;
 
 /// Result of a write action: a human-readable success message, or an error.
 pub type ActionResult = Result<String, String>;
@@ -366,6 +384,7 @@ impl AsyncJob for AsyncIssueDetailJob {
 	}
 }
 
+#[allow(clippy::large_enum_variant)]
 enum MrDetailJobState {
 	Request { remote: GitLabRemote, iid: u64 },
 	Response(MrDetailResult),
@@ -622,6 +641,191 @@ impl AsyncJob for AsyncTraceJob {
 	}
 }
 
+enum MrChangesJobState {
+	Request { remote: GitLabRemote, iid: u64 },
+	Response(MrChangesResult),
+}
+
+/// Fetches a merge request's changes (diff), off the UI thread.
+#[derive(Clone)]
+pub struct AsyncMrChangesJob {
+	state: Arc<Mutex<Option<MrChangesJobState>>>,
+}
+
+impl AsyncMrChangesJob {
+	pub fn new(remote: GitLabRemote, iid: u64) -> Self {
+		Self {
+			state: Arc::new(Mutex::new(Some(
+				MrChangesJobState::Request { remote, iid },
+			))),
+		}
+	}
+
+	pub fn result(&self) -> Option<MrChangesResult> {
+		let state = self.state.lock().ok()?;
+		match state.as_ref()? {
+			MrChangesJobState::Response(r) => Some(r.clone()),
+			MrChangesJobState::Request { .. } => None,
+		}
+	}
+
+	fn fetch(
+		remote: &GitLabRemote,
+		iid: u64,
+	) -> Result<MrChanges, Error> {
+		let client = GitLabClient::from_env(remote.clone())?;
+		runtime::block_on(client.merge_request_changes(iid))
+	}
+}
+
+impl AsyncJob for AsyncMrChangesJob {
+	type Notification = AsyncGitLabNotification;
+	type Progress = ();
+
+	fn run(
+		&mut self,
+		_params: RunParams<Self::Notification, Self::Progress>,
+	) -> GitResult<Self::Notification> {
+		if let Ok(mut state) = self.state.lock() {
+			*state = state.take().map(|state| match state {
+				MrChangesJobState::Request { remote, iid } => {
+					MrChangesJobState::Response(
+						Self::fetch(&remote, iid)
+							.map_err(|e| e.to_string()),
+					)
+				}
+				MrChangesJobState::Response(r) => {
+					MrChangesJobState::Response(r)
+				}
+			});
+		}
+		Ok(AsyncGitLabNotification::MrChanges)
+	}
+}
+
+enum CommitsJobState {
+	Request { remote: GitLabRemote },
+	Response(CommitsResult),
+}
+
+/// Fetches recent commits (with pipeline status), off the UI thread.
+#[derive(Clone)]
+pub struct AsyncCommitsJob {
+	state: Arc<Mutex<Option<CommitsJobState>>>,
+}
+
+impl AsyncCommitsJob {
+	pub fn new(remote: GitLabRemote) -> Self {
+		Self {
+			state: Arc::new(Mutex::new(Some(
+				CommitsJobState::Request { remote },
+			))),
+		}
+	}
+
+	pub fn result(&self) -> Option<CommitsResult> {
+		let state = self.state.lock().ok()?;
+		match state.as_ref()? {
+			CommitsJobState::Response(r) => Some(r.clone()),
+			CommitsJobState::Request { .. } => None,
+		}
+	}
+
+	fn fetch(
+		remote: &GitLabRemote,
+	) -> Result<Vec<Commit>, Error> {
+		let client = GitLabClient::from_env(remote.clone())?;
+		runtime::block_on(client.commits(None))
+	}
+}
+
+impl AsyncJob for AsyncCommitsJob {
+	type Notification = AsyncGitLabNotification;
+	type Progress = ();
+
+	fn run(
+		&mut self,
+		_params: RunParams<Self::Notification, Self::Progress>,
+	) -> GitResult<Self::Notification> {
+		if let Ok(mut state) = self.state.lock() {
+			*state = state.take().map(|state| match state {
+				CommitsJobState::Request { remote } => {
+					CommitsJobState::Response(
+						Self::fetch(&remote)
+							.map_err(|e| e.to_string()),
+					)
+				}
+				CommitsJobState::Response(r) => {
+					CommitsJobState::Response(r)
+				}
+			});
+		}
+		Ok(AsyncGitLabNotification::Commits)
+	}
+}
+
+enum CommitStatusesJobState {
+	Request { remote: GitLabRemote, sha: String },
+	Response(CommitStatusesResult),
+}
+
+/// Fetches a commit's statuses, off the UI thread.
+#[derive(Clone)]
+pub struct AsyncCommitStatusesJob {
+	state: Arc<Mutex<Option<CommitStatusesJobState>>>,
+}
+
+impl AsyncCommitStatusesJob {
+	pub fn new(remote: GitLabRemote, sha: String) -> Self {
+		Self {
+			state: Arc::new(Mutex::new(Some(
+				CommitStatusesJobState::Request { remote, sha },
+			))),
+		}
+	}
+
+	pub fn result(&self) -> Option<CommitStatusesResult> {
+		let state = self.state.lock().ok()?;
+		match state.as_ref()? {
+			CommitStatusesJobState::Response(r) => Some(r.clone()),
+			CommitStatusesJobState::Request { .. } => None,
+		}
+	}
+
+	fn fetch(
+		remote: &GitLabRemote,
+		sha: &str,
+	) -> Result<Vec<CommitStatus>, Error> {
+		let client = GitLabClient::from_env(remote.clone())?;
+		runtime::block_on(client.commit_statuses(sha))
+	}
+}
+
+impl AsyncJob for AsyncCommitStatusesJob {
+	type Notification = AsyncGitLabNotification;
+	type Progress = ();
+
+	fn run(
+		&mut self,
+		_params: RunParams<Self::Notification, Self::Progress>,
+	) -> GitResult<Self::Notification> {
+		if let Ok(mut state) = self.state.lock() {
+			*state = state.take().map(|state| match state {
+				CommitStatusesJobState::Request { remote, sha } => {
+					CommitStatusesJobState::Response(
+						Self::fetch(&remote, &sha)
+							.map_err(|e| e.to_string()),
+					)
+				}
+				CommitStatusesJobState::Response(r) => {
+					CommitStatusesJobState::Response(r)
+				}
+			});
+		}
+		Ok(AsyncGitLabNotification::CommitStatuses)
+	}
+}
+
 /// A one-shot write action against the GitLab API. Kept as a data enum (rather
 /// than a closure) so all `async` work stays inside this crate's runtime.
 #[derive(Debug, Clone)]
@@ -638,6 +842,10 @@ pub enum GitLabAction {
 	CreateIssueNote {
 		iid: u64,
 		body: String,
+	},
+	SetIssueLabels {
+		iid: u64,
+		labels: String,
 	},
 	// merge requests
 	CreateMergeRequest {
@@ -664,6 +872,10 @@ pub enum GitLabAction {
 	CreateMergeRequestNote {
 		iid: u64,
 		body: String,
+	},
+	SetMergeRequestLabels {
+		iid: u64,
+		labels: String,
 	},
 	// pipelines
 	CreatePipeline {
@@ -703,6 +915,10 @@ impl GitLabAction {
 				client.create_issue_note(iid, &body).await?;
 				Ok(format!("comment added to issue #{iid}"))
 			}
+			GitLabAction::SetIssueLabels { iid, labels } => {
+				client.set_issue_labels(iid, &labels).await?;
+				Ok(format!("issue #{iid} labels updated"))
+			}
 			GitLabAction::CreateMergeRequest {
 				source_branch,
 				target_branch,
@@ -740,6 +956,12 @@ impl GitLabAction {
 			GitLabAction::CreateMergeRequestNote { iid, body } => {
 				client.create_merge_request_note(iid, &body).await?;
 				Ok(format!("comment added to !{iid}"))
+			}
+			GitLabAction::SetMergeRequestLabels { iid, labels } => {
+				client
+					.set_merge_request_labels(iid, &labels)
+					.await?;
+				Ok(format!("!{iid} labels updated"))
 			}
 			GitLabAction::CreatePipeline { git_ref } => {
 				let p = client.create_pipeline(&git_ref).await?;

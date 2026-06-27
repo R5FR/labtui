@@ -15,9 +15,9 @@ use asyncgit::{
 };
 use asyncgitlab::{
 	has_token, store_token, AsyncActionJob, AsyncGitLabNotification,
-	AsyncMergeRequestsJob, AsyncMrDetailJob, GitLabAction,
-	GitLabRemote, MergeRequest, MergeRequestScope, MergeRequestState,
-	Note, StateEvent,
+	AsyncMergeRequestsJob, AsyncMrChangesJob, AsyncMrDetailJob,
+	ChangedFile, CiStatus, GitLabAction, GitLabRemote, MergeRequest,
+	MergeRequestScope, MergeRequestState, Note, StateEvent,
 };
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{
@@ -49,15 +49,23 @@ pub struct MergeRequestsTab {
 	detail: Option<Load<DetailData>>,
 	detail_iid: Option<u64>,
 	detail_scroll: u16,
+	/// diff (changes) view over the detail, if open
+	changes: Option<Load<Vec<ChangedFile>>>,
+	changes_scroll: u16,
+	/// case-insensitive substring filter applied to the list
+	filter: String,
 	/// transient one-line feedback after a write action
 	status_msg: Option<String>,
 	/// error from storing a token in the keyring
 	token_error: Option<String>,
 	async_mrs: AsyncSingleJob<AsyncMergeRequestsJob>,
 	async_detail: AsyncSingleJob<AsyncMrDetailJob>,
+	async_changes: AsyncSingleJob<AsyncMrChangesJob>,
 	async_action: AsyncSingleJob<AsyncActionJob>,
 	token_input: TextInputComponent,
 	comment_input: TextInputComponent,
+	label_input: TextInputComponent,
+	filter_input: TextInputComponent,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
 }
@@ -80,6 +88,18 @@ impl MergeRequestsTab {
 			"comment body, then press [Enter]",
 			true,
 		);
+		let label_input = TextInputComponent::new(
+			env,
+			"Labels",
+			"comma-separated labels, then press [Enter]",
+			false,
+		);
+		let filter_input = TextInputComponent::new(
+			env,
+			"Filter",
+			"type to filter, then press [Enter]",
+			false,
+		);
 
 		Self {
 			visible: false,
@@ -89,10 +109,16 @@ impl MergeRequestsTab {
 			detail: None,
 			detail_iid: None,
 			detail_scroll: 0,
+			changes: None,
+			changes_scroll: 0,
+			filter: String::new(),
 			status_msg: None,
 			token_error: None,
 			async_mrs: AsyncSingleJob::new(env.sender_gitlab.clone()),
 			async_detail: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
+			async_changes: AsyncSingleJob::new(
 				env.sender_gitlab.clone(),
 			),
 			async_action: AsyncSingleJob::new(
@@ -100,6 +126,8 @@ impl MergeRequestsTab {
 			),
 			token_input,
 			comment_input,
+			label_input,
+			filter_input,
 			theme: env.theme.clone(),
 			key_config: env.key_config.clone(),
 		}
@@ -156,6 +184,8 @@ impl MergeRequestsTab {
 	pub fn is_editing(&self) -> bool {
 		self.token_input.is_visible()
 			|| self.comment_input.is_visible()
+			|| self.label_input.is_visible()
+			|| self.filter_input.is_visible()
 	}
 
 	fn submit_token(&mut self) {
@@ -307,6 +337,77 @@ impl MergeRequestsTab {
 		}
 	}
 
+	const fn changes_open(&self) -> bool {
+		self.changes.is_some()
+	}
+
+	/// Open the diff (changes) view for the MR in the detail view.
+	fn open_changes(&mut self) {
+		let (Some(iid), Some(remote)) =
+			(self.detail_iid, self.remote.clone())
+		else {
+			return;
+		};
+		self.changes_scroll = 0;
+		self.changes = Some(Load::Loading);
+		self.async_changes
+			.spawn(AsyncMrChangesJob::new(remote, iid));
+	}
+
+	fn close_changes(&mut self) {
+		self.changes = None;
+		self.changes_scroll = 0;
+	}
+
+	const fn scroll_changes(&mut self, down: bool) {
+		if down {
+			self.changes_scroll =
+				self.changes_scroll.saturating_add(1);
+		} else {
+			self.changes_scroll =
+				self.changes_scroll.saturating_sub(1);
+		}
+	}
+
+	/// Open the label editor, pre-filled with the current MR's labels.
+	fn show_label_prompt(&mut self) {
+		if self.label_input.is_visible() {
+			return;
+		}
+		let labels = self
+			.current_mr()
+			.map(|m| m.labels.join(", "))
+			.unwrap_or_default();
+		self.label_input.set_text(labels);
+		let _ = self.label_input.show();
+	}
+
+	fn submit_labels(&mut self) {
+		let labels = self.label_input.get_text().trim().to_string();
+		self.label_input.hide();
+		let Some(iid) = self.action_iid() else {
+			return;
+		};
+		self.spawn_action(GitLabAction::SetMergeRequestLabels {
+			iid,
+			labels,
+		});
+	}
+
+	fn show_filter_prompt(&mut self) {
+		if self.filter_input.is_visible() {
+			return;
+		}
+		self.filter_input.set_text(self.filter.clone());
+		let _ = self.filter_input.show();
+	}
+
+	fn submit_filter(&mut self) {
+		self.filter = self.filter_input.get_text().trim().to_string();
+		self.filter_input.hide();
+		self.selection = 0;
+	}
+
 	/// handle a finished GitLab job
 	pub fn update_gitlab(&mut self, ev: AsyncGitLabNotification) {
 		match ev {
@@ -347,18 +448,31 @@ impl MergeRequestsTab {
 					}
 				}
 			}
+			AsyncGitLabNotification::MrChanges => {
+				if let Some(job) = self.async_changes.take_last() {
+					if let Some(result) = job.result() {
+						self.changes = Some(match result {
+							Ok(c) => Load::Loaded(c.changes),
+							Err(e) => Load::Error(e),
+						});
+					}
+				}
+			}
 			AsyncGitLabNotification::Issues
 			| AsyncGitLabNotification::Board
 			| AsyncGitLabNotification::IssueDetail
 			| AsyncGitLabNotification::Pipelines
 			| AsyncGitLabNotification::PipelineJobs
-			| AsyncGitLabNotification::JobTrace => {}
+			| AsyncGitLabNotification::JobTrace
+			| AsyncGitLabNotification::Commits
+			| AsyncGitLabNotification::CommitStatuses => {}
 		}
 	}
 
 	pub fn any_work_pending(&self) -> bool {
 		self.async_mrs.is_pending()
 			|| self.async_detail.is_pending()
+			|| self.async_changes.is_pending()
 			|| self.async_action.is_pending()
 	}
 
@@ -369,12 +483,36 @@ impl MergeRequestsTab {
 		}
 	}
 
+	fn matches_filter(&self, mr: &MergeRequest) -> bool {
+		if self.filter.is_empty() {
+			return true;
+		}
+		let f = self.filter.to_lowercase();
+		mr.title.to_lowercase().contains(&f)
+			|| mr.source_branch.to_lowercase().contains(&f)
+			|| mr.target_branch.to_lowercase().contains(&f)
+			|| mr
+				.author
+				.as_ref()
+				.is_some_and(|a| {
+					a.username.to_lowercase().contains(&f)
+				})
+			|| mr.labels.iter().any(|l| l.to_lowercase().contains(&f))
+			|| format!("!{}", mr.iid).contains(&f)
+	}
+
+	fn filtered(&self) -> Vec<&MergeRequest> {
+		self.loaded().map_or_else(Vec::new, |mrs| {
+			mrs.iter().filter(|m| self.matches_filter(m)).collect()
+		})
+	}
+
 	fn selected_mr(&self) -> Option<&MergeRequest> {
-		self.loaded().and_then(|m| m.get(self.selection))
+		self.filtered().get(self.selection).copied()
 	}
 
 	fn clamp_selection(&mut self) {
-		let len = self.loaded().map_or(0, <[_]>::len);
+		let len = self.filtered().len();
 		if len == 0 {
 			self.selection = 0;
 		} else if self.selection >= len {
@@ -383,7 +521,7 @@ impl MergeRequestsTab {
 	}
 
 	fn move_selection(&mut self, down: bool) {
-		let len = self.loaded().map_or(0, <[_]>::len);
+		let len = self.filtered().len();
 		if len == 0 {
 			return;
 		}
@@ -453,13 +591,9 @@ impl MergeRequestsTab {
 		}
 	}
 
-	fn render_list(
-		&self,
-		f: &mut Frame,
-		rect: Rect,
-		mrs: &[MergeRequest],
-	) {
+	fn render_list(&self, f: &mut Frame, rect: Rect) {
 		let (list_area, footer) = self.split_footer(rect);
+		let mrs = self.filtered();
 
 		let items: Vec<ListItem> = mrs
 			.iter()
@@ -472,9 +606,13 @@ impl MergeRequestsTab {
 					.map_or_else(String::new, |a| {
 						format!(" @{}", a.username)
 					});
+				let ci = mr.head_pipeline.as_ref().map_or_else(
+					String::new,
+					|p| format!("  {}", ci_marker(p.status)),
+				);
 				let line = Line::from(vec![Span::styled(
 					format!(
-						"{} !{}  {}  ({} → {}){author}",
+						"{} !{}  {}  ({} → {}){author}{ci}",
 						Self::marker(mr),
 						mr.iid,
 						mr.title,
@@ -487,10 +625,13 @@ impl MergeRequestsTab {
 			})
 			.collect();
 
+		let title = if self.filter.is_empty() {
+			self.title()
+		} else {
+			format!("{}  (filter: {})", self.title(), self.filter)
+		};
 		let list = List::new(items).block(
-			Block::default()
-				.borders(Borders::ALL)
-				.title(self.title()),
+			Block::default().borders(Borders::ALL).title(title),
 		);
 		f.render_widget(list, list_area);
 		self.draw_footer(f, footer);
@@ -505,7 +646,7 @@ impl MergeRequestsTab {
 		let (area, footer) = self.split_footer(rect);
 		let lines = self.detail_lines(data);
 		let title = format!(
-			"MR !{}  ·  [Esc] back  [n] comment  [m] merge  [a] approve  [u] unapprove  [b] rebase  [c] close/reopen  [o] open",
+			"MR !{}  ·  [esc] back  [d] diff  [l] labels  [n] comment  [m] merge  [a]/[u] approve  [b] rebase  [c] close  [o] open",
 			data.mr.iid
 		);
 		let block = Block::default()
@@ -562,6 +703,22 @@ impl MergeRequestsTab {
 			format!("{} → {}", mr.source_branch, mr.target_branch),
 			style,
 		));
+		if let Some(p) = &mr.head_pipeline {
+			lines.push(Line::styled(
+				format!(
+					"pipeline: {} #{}",
+					ci_marker(p.status),
+					p.id
+				),
+				style,
+			));
+		}
+		if !mr.labels.is_empty() {
+			lines.push(Line::styled(
+				format!("labels: {}", mr.labels.join(", ")),
+				style,
+			));
+		}
 		if let Some(status) = &mr.detailed_merge_status {
 			lines.push(Line::styled(
 				format!("merge status: {status}"),
@@ -587,8 +744,18 @@ impl MergeRequestsTab {
 			}
 		}
 
+		lines.extend(self.comment_lines(&data.notes));
+		lines
+	}
+
+	/// Render the (non-system) notes of an issue/MR as text lines.
+	fn comment_lines(&self, notes: &[Note]) -> Vec<Line<'static>> {
+		let style = self.theme.text(true, false);
+		let header = self.theme.text(true, true);
 		let comments: Vec<&Note> =
-			data.notes.iter().filter(|n| !n.system).collect();
+			notes.iter().filter(|n| !n.system).collect();
+
+		let mut lines: Vec<Line> = Vec::new();
 		lines.push(Line::raw(""));
 		lines.push(Line::styled(
 			format!("── Comments ({}) ──", comments.len()),
@@ -613,8 +780,55 @@ impl MergeRequestsTab {
 				lines.push(Line::styled(l.to_string(), style));
 			}
 		}
-
 		lines
+	}
+
+	fn render_changes(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		files: &[ChangedFile],
+	) {
+		let (area, footer) = self.split_footer(rect);
+		let style = self.theme.text(true, false);
+		let header = self.theme.text(true, true);
+
+		let mut lines: Vec<Line> = Vec::new();
+		lines.push(Line::styled(
+			format!("{} changed file(s)", files.len()),
+			header,
+		));
+		for file in files {
+			lines.push(Line::raw(""));
+			let tag = if file.new_file {
+				"added"
+			} else if file.deleted_file {
+				"deleted"
+			} else if file.renamed_file {
+				"renamed"
+			} else {
+				"modified"
+			};
+			lines.push(Line::styled(
+				format!("▸ {} ({tag})", file.new_path),
+				header,
+			));
+			for l in file.diff.lines() {
+				lines.push(Line::styled(l.to_string(), style));
+			}
+		}
+
+		let block = Block::default()
+			.borders(Borders::ALL)
+			.title("Changes  ·  [↑/↓] scroll  [esc] back");
+		f.render_widget(
+			Paragraph::new(lines)
+				.block(block)
+				.wrap(Wrap { trim: false })
+				.scroll((self.changes_scroll, 0)),
+			area,
+		);
+		self.draw_footer(f, footer);
 	}
 }
 
@@ -658,6 +872,24 @@ impl DrawableComponent for MergeRequestsTab {
 			return Ok(());
 		}
 
+		// diff view takes over while open
+		if let Some(changes) = &self.changes {
+			match changes {
+				Load::Loading => {
+					self.draw_message(f, rect, "Loading changes…");
+				}
+				Load::Error(e) => self.draw_message(
+					f,
+					rect,
+					&format!("Failed to load changes:\n{e}"),
+				),
+				Load::Loaded(files) => {
+					self.render_changes(f, rect, files);
+				}
+			}
+			return Ok(());
+		}
+
 		if let Some(detail) = &self.detail {
 			match detail {
 				Load::Loading => {
@@ -677,6 +909,9 @@ impl DrawableComponent for MergeRequestsTab {
 			if self.comment_input.is_visible() {
 				self.comment_input.draw(f, rect)?;
 			}
+			if self.label_input.is_visible() {
+				self.label_input.draw(f, rect)?;
+			}
 			return Ok(());
 		}
 
@@ -694,7 +929,11 @@ impl DrawableComponent for MergeRequestsTab {
 			Load::Loaded(mrs) if mrs.is_empty() => {
 				self.draw_message(f, rect, "No open merge requests.");
 			}
-			Load::Loaded(mrs) => self.render_list(f, rect, mrs),
+			Load::Loaded(_) => self.render_list(f, rect),
+		}
+
+		if self.filter_input.is_visible() {
+			self.filter_input.draw(f, rect)?;
 		}
 
 		Ok(())
@@ -743,6 +982,20 @@ impl Component for MergeRequestsTab {
 			return Ok(state);
 		}
 
+		if self.changes_open() {
+			if let Event::Key(k) = ev {
+				if key_match(k, self.key_config.keys.exit_popup) {
+					self.close_changes();
+				} else if key_match(k, self.key_config.keys.move_down)
+				{
+					self.scroll_changes(true);
+				} else if key_match(k, self.key_config.keys.move_up) {
+					self.scroll_changes(false);
+				}
+			}
+			return Ok(EventState::Consumed);
+		}
+
 		if self.detail_open() {
 			if let Event::Key(k) = ev {
 				self.detail_event(k);
@@ -770,6 +1023,11 @@ impl Component for MergeRequestsTab {
 				&& self.selected_mr().is_some()
 			{
 				self.open_in_browser();
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('f'))
+				&& !token_missing
+			{
+				self.show_filter_prompt();
 				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('r'))
 				&& !token_missing
@@ -836,6 +1094,38 @@ impl MergeRequestsTab {
 			return Ok(Some(EventState::Consumed));
 		}
 
+		if self.label_input.is_visible() {
+			if !self.label_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_labels();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.label_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
+		if self.filter_input.is_visible() {
+			if !self.filter_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_filter();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.filter_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
 		Ok(None)
 	}
 
@@ -849,6 +1139,10 @@ impl MergeRequestsTab {
 			self.scroll_detail(false);
 		} else if matches!(k.code, KeyCode::Char('n')) {
 			self.show_comment_prompt();
+		} else if matches!(k.code, KeyCode::Char('d')) {
+			self.open_changes();
+		} else if matches!(k.code, KeyCode::Char('l')) {
+			self.show_label_prompt();
 		} else if matches!(k.code, KeyCode::Char('o')) {
 			self.open_in_browser();
 		} else if matches!(k.code, KeyCode::Char('m')) {
@@ -878,6 +1172,19 @@ impl MergeRequestsTab {
 		} else if matches!(k.code, KeyCode::Char('c')) {
 			self.toggle_state();
 		}
+	}
+}
+
+const fn ci_marker(status: CiStatus) -> &'static str {
+	match status {
+		CiStatus::Success => "✓",
+		CiStatus::Failed => "✗",
+		CiStatus::Running => "▶",
+		CiStatus::Canceled => "⊘",
+		CiStatus::Skipped => "»",
+		CiStatus::Manual => "⏸",
+		CiStatus::Unknown => "?",
+		_ => "•",
 	}
 }
 

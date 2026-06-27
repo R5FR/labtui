@@ -68,6 +68,8 @@ pub struct IssuesTab {
 	/// active column / row in the board view
 	board_col: usize,
 	board_row: usize,
+	/// case-insensitive substring filter applied to the list view
+	filter: String,
 	/// transient one-line feedback after a write action
 	status_msg: Option<String>,
 	/// error from storing a token in the keyring
@@ -79,6 +81,8 @@ pub struct IssuesTab {
 	token_input: TextInputComponent,
 	new_issue_input: TextInputComponent,
 	comment_input: TextInputComponent,
+	label_input: TextInputComponent,
+	filter_input: TextInputComponent,
 	theme: SharedTheme,
 	key_config: SharedKeyConfig,
 }
@@ -108,6 +112,18 @@ impl IssuesTab {
 			"comment body, then press [Enter]",
 			true,
 		);
+		let label_input = TextInputComponent::new(
+			env,
+			"Labels",
+			"comma-separated labels, then press [Enter]",
+			false,
+		);
+		let filter_input = TextInputComponent::new(
+			env,
+			"Filter",
+			"type to filter, then press [Enter]",
+			false,
+		);
 
 		Self {
 			visible: false,
@@ -122,6 +138,7 @@ impl IssuesTab {
 			selection: 0,
 			board_col: 0,
 			board_row: 0,
+			filter: String::new(),
 			status_msg: None,
 			token_error: None,
 			async_issues: AsyncSingleJob::new(
@@ -139,6 +156,8 @@ impl IssuesTab {
 			token_input,
 			new_issue_input,
 			comment_input,
+			label_input,
+			filter_input,
 			theme: env.theme.clone(),
 			key_config: env.key_config.clone(),
 		}
@@ -294,6 +313,8 @@ impl IssuesTab {
 		self.token_input.is_visible()
 			|| self.new_issue_input.is_visible()
 			|| self.comment_input.is_visible()
+			|| self.label_input.is_visible()
+			|| self.filter_input.is_visible()
 	}
 
 	/// Persist the typed token to the OS keyring, then start loading.
@@ -396,6 +417,52 @@ impl IssuesTab {
 			.spawn(AsyncActionJob::new(remote, action));
 	}
 
+	/// The issue actions apply to: the detail's issue, else the selection.
+	fn action_issue(&self) -> Option<(u64, Vec<String>)> {
+		if let Some(Load::Loaded(d)) = &self.detail {
+			return Some((d.issue.iid, d.issue.labels.clone()));
+		}
+		self.selected_issue().map(|i| (i.iid, i.labels.clone()))
+	}
+
+	fn show_label_prompt(&mut self) {
+		if self.label_input.is_visible() {
+			return;
+		}
+		let labels = self
+			.action_issue()
+			.map(|(_, l)| l.join(", "))
+			.unwrap_or_default();
+		self.label_input.set_text(labels);
+		let _ = self.label_input.show();
+	}
+
+	fn submit_labels(&mut self) {
+		let labels = self.label_input.get_text().trim().to_string();
+		self.label_input.hide();
+		let Some((iid, _)) = self.action_issue() else {
+			return;
+		};
+		self.spawn_action(GitLabAction::SetIssueLabels {
+			iid,
+			labels,
+		});
+	}
+
+	fn show_filter_prompt(&mut self) {
+		if self.filter_input.is_visible() {
+			return;
+		}
+		self.filter_input.set_text(self.filter.clone());
+		let _ = self.filter_input.show();
+	}
+
+	fn submit_filter(&mut self) {
+		self.filter = self.filter_input.get_text().trim().to_string();
+		self.filter_input.hide();
+		self.selection = 0;
+	}
+
 	/// handle a finished GitLab job
 	pub fn update_gitlab(&mut self, ev: AsyncGitLabNotification) {
 		match ev {
@@ -452,9 +519,12 @@ impl IssuesTab {
 			}
 			AsyncGitLabNotification::MergeRequests
 			| AsyncGitLabNotification::MrDetail
+			| AsyncGitLabNotification::MrChanges
 			| AsyncGitLabNotification::Pipelines
 			| AsyncGitLabNotification::PipelineJobs
-			| AsyncGitLabNotification::JobTrace => {}
+			| AsyncGitLabNotification::JobTrace
+			| AsyncGitLabNotification::Commits
+			| AsyncGitLabNotification::CommitStatuses => {}
 		}
 	}
 
@@ -470,6 +540,35 @@ impl IssuesTab {
 			Load::Loaded(issues) => Some(issues),
 			_ => None,
 		}
+	}
+
+	fn matches_filter(&self, issue: &Issue) -> bool {
+		if self.filter.is_empty() {
+			return true;
+		}
+		let f = self.filter.to_lowercase();
+		issue.title.to_lowercase().contains(&f)
+			|| issue
+				.author
+				.as_ref()
+				.is_some_and(|a| {
+					a.username.to_lowercase().contains(&f)
+				})
+			|| issue
+				.labels
+				.iter()
+				.any(|l| l.to_lowercase().contains(&f))
+			|| format!("#{}", issue.iid).contains(&f)
+	}
+
+	/// Issues shown in the list view (after applying the filter).
+	fn filtered_issues(&self) -> Vec<&Issue> {
+		self.list_issues().map_or_else(Vec::new, |issues| {
+			issues
+				.iter()
+				.filter(|i| self.matches_filter(i))
+				.collect()
+		})
 	}
 
 	fn board_columns(&self) -> Option<&[BoardColumn]> {
@@ -511,7 +610,7 @@ impl IssuesTab {
 	fn selected_issue(&self) -> Option<&Issue> {
 		match self.view {
 			View::List => {
-				self.list_issues().and_then(|i| i.get(self.selection))
+				self.filtered_issues().get(self.selection).copied()
 			}
 			View::Board => self
 				.board_columns()
@@ -521,7 +620,7 @@ impl IssuesTab {
 	}
 
 	fn clamp_selection(&mut self) {
-		let len = self.list_issues().map_or(0, <[_]>::len);
+		let len = self.filtered_issues().len();
 		if len == 0 {
 			self.selection = 0;
 		} else if self.selection >= len {
@@ -551,7 +650,7 @@ impl IssuesTab {
 	}
 
 	fn move_selection(&mut self, down: bool) {
-		let len = self.list_issues().map_or(0, <[_]>::len);
+		let len = self.filtered_issues().len();
 		if len == 0 {
 			return;
 		}
@@ -668,13 +767,9 @@ impl IssuesTab {
 		)])
 	}
 
-	fn render_list(
-		&self,
-		f: &mut Frame,
-		rect: Rect,
-		issues: &[Issue],
-	) {
+	fn render_list(&self, f: &mut Frame, rect: Rect) {
 		let (list_area, footer) = self.split_footer(rect);
+		let issues = self.filtered_issues();
 
 		let items: Vec<ListItem> = issues
 			.iter()
@@ -686,10 +781,13 @@ impl IssuesTab {
 			})
 			.collect();
 
+		let title = if self.filter.is_empty() {
+			self.title()
+		} else {
+			format!("{}  (filter: {})", self.title(), self.filter)
+		};
 		let list = List::new(items).block(
-			Block::default()
-				.borders(Borders::ALL)
-				.title(self.title()),
+			Block::default().borders(Borders::ALL).title(title),
 		);
 		f.render_widget(list, list_area);
 		self.draw_footer(f, footer);
@@ -861,7 +959,7 @@ impl IssuesTab {
 			"[c] close"
 		};
 		let title = format!(
-			"Issue #{}  ·  [Esc] back  [n] comment  {close_hint}  [o] open",
+			"Issue #{}  ·  [esc] back  [n] comment  [l] labels  {close_hint}  [o] open",
 			issue.iid
 		);
 		let block = Block::default()
@@ -879,41 +977,7 @@ impl IssuesTab {
 impl DrawableComponent for IssuesTab {
 	fn draw(&self, f: &mut Frame, rect: Rect) -> Result<()> {
 		// remote / token gating, shared by both views
-		if self.remote.is_none() {
-			self.draw_message(
-				f,
-				rect,
-				"No GitLab remote detected for this repository.",
-			);
-			return Ok(());
-		}
-
-		if !self.token_available() {
-			if self.token_input.is_visible() {
-				self.draw_message(
-					f,
-					rect,
-					&format!(
-						"A GitLab token is required for {}.",
-						self.host()
-					),
-				);
-				self.token_input.draw(f, rect)?;
-			} else if let Some(err) = &self.token_error {
-				self.draw_message(
-					f,
-					rect,
-					&format!(
-						"{err}\n\nPress [Enter] to try again."
-					),
-				);
-			} else {
-				self.draw_message(
-					f,
-					rect,
-					&strings::gitlab_token_help(self.host(), true),
-				);
-			}
+		if self.draw_gate(f, rect)? {
 			return Ok(());
 		}
 
@@ -936,6 +1000,9 @@ impl DrawableComponent for IssuesTab {
 			}
 			if self.comment_input.is_visible() {
 				self.comment_input.draw(f, rect)?;
+			}
+			if self.label_input.is_visible() {
+				self.label_input.draw(f, rect)?;
 			}
 			return Ok(());
 		}
@@ -961,15 +1028,14 @@ impl DrawableComponent for IssuesTab {
 			),
 			Status::Loaded => match self.view {
 				View::List => {
-					let issues = self.list_issues().unwrap_or(&[]);
-					if issues.is_empty() {
+					if self.filtered_issues().is_empty() {
 						self.draw_message(
 							f,
 							rect,
-							"No open issues.\n\nPress [n] to create one, [b] for board view.",
+							"No matching issues.\n\nPress [n] to create one, [b] for board view, [f] to filter.",
 						);
 					} else {
-						self.render_list(f, rect, issues);
+						self.render_list(f, rect);
 					}
 				}
 				View::Board => {
@@ -982,6 +1048,9 @@ impl DrawableComponent for IssuesTab {
 
 		if self.new_issue_input.is_visible() {
 			self.new_issue_input.draw(f, rect)?;
+		}
+		if self.filter_input.is_visible() {
+			self.filter_input.draw(f, rect)?;
 		}
 
 		Ok(())
@@ -1134,6 +1203,17 @@ impl Component for IssuesTab {
 			{
 				self.open_in_browser();
 				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('l'))
+				&& self.selected_issue().is_some()
+			{
+				self.show_label_prompt();
+				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('f'))
+				&& !token_missing
+				&& self.view == View::List
+			{
+				self.show_filter_prompt();
+				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('r'))
 				&& !token_missing
 			{
@@ -1161,6 +1241,46 @@ impl Component for IssuesTab {
 }
 
 impl IssuesTab {
+	/// Draw the no-remote / token-required screens. Returns `true` when it
+	/// handled drawing and the caller should stop.
+	fn draw_gate(&self, f: &mut Frame, rect: Rect) -> Result<bool> {
+		if self.remote.is_none() {
+			self.draw_message(
+				f,
+				rect,
+				"No GitLab remote detected for this repository.",
+			);
+			return Ok(true);
+		}
+		if !self.token_available() {
+			if self.token_input.is_visible() {
+				self.draw_message(
+					f,
+					rect,
+					&format!(
+						"A GitLab token is required for {}.",
+						self.host()
+					),
+				);
+				self.token_input.draw(f, rect)?;
+			} else if let Some(err) = &self.token_error {
+				self.draw_message(
+					f,
+					rect,
+					&format!("{err}\n\nPress [Enter] to try again."),
+				);
+			} else {
+				self.draw_message(
+					f,
+					rect,
+					&strings::gitlab_token_help(self.host(), true),
+				);
+			}
+			return Ok(true);
+		}
+		Ok(false)
+	}
+
 	/// Route a key event to whichever text input is active. Returns
 	/// `Some(Consumed)` when an input handled it, `None` when none is open.
 	fn input_event(
@@ -1215,6 +1335,38 @@ impl IssuesTab {
 			return Ok(Some(EventState::Consumed));
 		}
 
+		if self.label_input.is_visible() {
+			if !self.label_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_labels();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.label_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
+		if self.filter_input.is_visible() {
+			if !self.filter_input.event(ev)?.is_consumed() {
+				if let Event::Key(k) = ev {
+					if key_match(k, self.key_config.keys.enter) {
+						self.submit_filter();
+					} else if key_match(
+						k,
+						self.key_config.keys.exit_popup,
+					) {
+						self.filter_input.hide();
+					}
+				}
+			}
+			return Ok(Some(EventState::Consumed));
+		}
+
 		Ok(None)
 	}
 
@@ -1228,6 +1380,8 @@ impl IssuesTab {
 			self.scroll_detail(false);
 		} else if matches!(k.code, KeyCode::Char('n')) {
 			self.show_comment_prompt();
+		} else if matches!(k.code, KeyCode::Char('l')) {
+			self.show_label_prompt();
 		} else if matches!(k.code, KeyCode::Char('o')) {
 			self.open_in_browser();
 		} else if matches!(k.code, KeyCode::Char('c')) {
