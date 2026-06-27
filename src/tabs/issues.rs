@@ -343,10 +343,17 @@ impl IssuesTab {
 		});
 	}
 
-	/// Close the currently selected issue.
+	/// True when an opened (still closable) issue is selected.
+	fn selected_is_open(&self) -> bool {
+		self.selected_issue()
+			.is_some_and(|i| i.state != IssueState::Closed)
+	}
+
+	/// Close the currently selected issue (no-op if already closed).
 	fn close_selected(&mut self) {
-		let Some(iid) = self.selected_issue().map(|i| i.iid) else {
-			return;
+		let iid = match self.selected_issue() {
+			Some(i) if i.state != IssueState::Closed => i.iid,
+			_ => return,
 		};
 		self.spawn_action(GitLabAction::SetIssueState {
 			iid,
@@ -768,8 +775,13 @@ impl IssuesTab {
 			}
 		}
 
+		let close_hint = if issue.state == IssueState::Closed {
+			""
+		} else {
+			"  [c] close"
+		};
 		let title = format!(
-			"Issue #{}  ·  [Esc] back  [n] comment  [c] close",
+			"Issue #{}  ·  [Esc] back  [n] comment{close_hint}",
 			issue.iid
 		);
 		let block = Block::default()
@@ -944,7 +956,7 @@ impl Component for IssuesTab {
 			));
 			out.push(CommandInfo::new(
 				strings::commands::issue_close(&self.key_config),
-				self.selected_issue().is_some(),
+				self.selected_is_open(),
 				self.content_loaded(),
 			));
 		}
@@ -1013,7 +1025,7 @@ impl Component for IssuesTab {
 				self.show_new_issue_prompt();
 				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('c'))
-				&& self.selected_issue().is_some()
+				&& self.selected_is_open()
 			{
 				self.close_selected();
 				return Ok(EventState::Consumed);
@@ -1112,7 +1124,15 @@ impl IssuesTab {
 		} else if matches!(k.code, KeyCode::Char('n')) {
 			self.show_comment_prompt();
 		} else if matches!(k.code, KeyCode::Char('c')) {
-			if let Some(iid) = self.detail_iid {
+			let iid = match &self.detail {
+				Some(Load::Loaded(d))
+					if d.issue.state != IssueState::Closed =>
+				{
+					Some(d.issue.iid)
+				}
+				_ => None,
+			};
+			if let Some(iid) = iid {
 				self.spawn_action(GitLabAction::SetIssueState {
 					iid,
 					event: StateEvent::Close,
