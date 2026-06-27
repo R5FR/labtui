@@ -9,6 +9,7 @@
 //! The client is plain `async`. Later it gets wrapped in gitui's `AsyncJob`
 //! pattern so calls run off the UI thread and report back over a channel.
 
+pub mod board;
 pub mod client;
 pub mod config;
 pub mod error;
@@ -17,6 +18,7 @@ pub mod remote;
 pub mod runtime;
 pub mod types;
 
+pub use board::{build_board, BoardColumn};
 pub use client::{
 	GitLabClient, IssueScope, MergeRequestScope, StateEvent,
 };
@@ -25,14 +27,15 @@ pub use config::{
 };
 pub use error::{Error, Result};
 pub use job::{
-	ActionResult, AsyncActionJob, AsyncGitLabNotification,
-	AsyncIssuesJob, AsyncMergeRequestsJob, GitLabAction,
-	IssuesResult, MergeRequestsResult,
+	ActionResult, AsyncActionJob, AsyncBoardJob,
+	AsyncGitLabNotification, AsyncIssuesJob, AsyncMergeRequestsJob,
+	BoardResult, GitLabAction, IssuesResult, MergeRequestsResult,
 };
 pub use remote::GitLabRemote;
 pub use types::{
-	CiStatus, Issue, IssueState, Job, MergeRequest, MergeRequestState,
-	Note, Pipeline, PipelineStatus, User,
+	Board, BoardList, CiStatus, Issue, IssueState, Job, Label,
+	MergeRequest, MergeRequestState, Note, Pipeline, PipelineStatus,
+	User,
 };
 
 /// Build a client straight from a git remote URL, using a token from the

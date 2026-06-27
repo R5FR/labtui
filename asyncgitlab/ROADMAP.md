@@ -39,6 +39,7 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 | Capability | Library | UI |
 |---|---|---|
 | List (opened / all) | ✅ | ✅ |
+| Board view (columns by label) | ✅ | ✅ (`b`) |
 | Get one | ✅ | ⬜ |
 | Create | ✅ | ✅ (`n`) |
 | Close / reopen | ✅ | ✅ close (`c`) |

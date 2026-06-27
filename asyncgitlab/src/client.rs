@@ -3,7 +3,7 @@
 use crate::{
 	error::{Error, Result},
 	remote::GitLabRemote,
-	types::{Issue, Job, MergeRequest, Note, Pipeline},
+	types::{Board, Issue, Job, MergeRequest, Note, Pipeline},
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde_json::{json, Value};
@@ -383,6 +383,11 @@ impl GitLabClient {
 			&json!({ "body": body }),
 		)
 		.await
+	}
+
+	/// Issue boards configured for the project.
+	pub async fn boards(&self) -> Result<Vec<Board>> {
+		self.get_paginated(&self.project_url("/boards")).await
 	}
 
 	// ---- pipelines & jobs -------------------------------------------------

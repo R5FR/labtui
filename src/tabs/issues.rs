@@ -14,40 +14,51 @@ use asyncgit::{
 	sync::{get_default_remote, get_remote_url, RepoPathRef},
 };
 use asyncgitlab::{
-	has_token, store_token, AsyncActionJob, AsyncGitLabNotification,
-	AsyncIssuesJob, GitLabAction, GitLabRemote, Issue, IssueScope,
-	IssueState, StateEvent,
+	has_token, store_token, AsyncActionJob, AsyncBoardJob,
+	AsyncGitLabNotification, AsyncIssuesJob, BoardColumn, GitLabAction,
+	GitLabRemote, Issue, IssueScope, IssueState, StateEvent,
 };
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
-	layout::{Alignment, Constraint, Direction, Layout, Rect},
+	layout::{
+		Alignment, Constraint, Direction, Layout, Rect,
+	},
 	text::{Line, Span},
 	widgets::{Block, Borders, List, ListItem, Paragraph},
 	Frame,
 };
 
-/// Loading state of the issue list.
-enum LoadState {
-	/// no GitLab remote could be detected for this repo
-	NoRemote,
-	/// a GitLab remote exists but no token is available yet
-	NeedToken,
-	/// request in flight, nothing loaded yet
+/// Loading state of a fetched payload.
+enum Load<T> {
 	Loading,
-	/// loaded issues (possibly empty)
-	Loaded(Vec<Issue>),
-	/// request failed
+	Loaded(T),
 	Error(String),
+}
+
+/// Which view of the issues is shown.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum View {
+	List,
+	Board,
 }
 
 pub struct IssuesTab {
 	visible: bool,
 	remote: Option<GitLabRemote>,
-	state: LoadState,
+	view: View,
+	list: Load<Vec<Issue>>,
+	board: Load<Vec<BoardColumn>>,
+	/// selection in the flat list view
 	selection: usize,
+	/// active column / row in the board view
+	board_col: usize,
+	board_row: usize,
 	/// transient one-line feedback after a write action
 	status_msg: Option<String>,
+	/// error from storing a token in the keyring
+	token_error: Option<String>,
 	async_issues: AsyncSingleJob<AsyncIssuesJob>,
+	async_board: AsyncSingleJob<AsyncBoardJob>,
 	async_action: AsyncSingleJob<AsyncActionJob>,
 	token_input: TextInputComponent,
 	new_issue_input: TextInputComponent,
@@ -58,12 +69,6 @@ pub struct IssuesTab {
 impl IssuesTab {
 	pub fn new(env: &Environment) -> Self {
 		let remote = detect_gitlab_remote(&env.repo);
-
-		let state = match &remote {
-			None => LoadState::NoRemote,
-			Some(r) if has_token(&r.host) => LoadState::Loading,
-			Some(_) => LoadState::NeedToken,
-		};
 
 		let token_input = TextInputComponent::new(
 			env,
@@ -82,11 +87,19 @@ impl IssuesTab {
 
 		Self {
 			visible: false,
-			state,
 			remote,
+			view: View::List,
+			list: Load::Loading,
+			board: Load::Loading,
 			selection: 0,
+			board_col: 0,
+			board_row: 0,
 			status_msg: None,
+			token_error: None,
 			async_issues: AsyncSingleJob::new(
+				env.sender_gitlab.clone(),
+			),
+			async_board: AsyncSingleJob::new(
 				env.sender_gitlab.clone(),
 			),
 			async_action: AsyncSingleJob::new(
@@ -105,45 +118,65 @@ impl IssuesTab {
 		}
 	}
 
-	/// Decide what to do based on remote + token availability: spawn a load,
-	/// or surface the token prompt.
+	/// True when a GitLab remote was detected and a token is available.
+	fn token_available(&self) -> bool {
+		self.remote
+			.as_ref()
+			.is_some_and(|r| has_token(&r.host))
+	}
+
+	/// Spawn the fetch for the active view if it has not loaded yet.
 	fn ensure_load(&mut self) {
+		if !self.token_available() {
+			return;
+		}
+		if self.token_input.is_visible() {
+			self.token_input.hide();
+		}
 		let Some(remote) = self.remote.clone() else {
 			return;
 		};
+		if self.async_action.is_pending() {
+			return;
+		}
 
-		if has_token(&remote.host) {
-			if self.token_input.is_visible() {
-				self.token_input.hide();
-			}
-			if !self.async_issues.is_pending()
-				&& !self.async_action.is_pending()
-			{
-				if matches!(self.state, LoadState::NeedToken) {
-					self.state = LoadState::Loading;
+		match self.view {
+			View::List => {
+				if matches!(self.list, Load::Loading)
+					&& !self.async_issues.is_pending()
+				{
+					self.async_issues.spawn(AsyncIssuesJob::new(
+						remote,
+						IssueScope::Opened,
+					));
 				}
-				self.async_issues.spawn(AsyncIssuesJob::new(
-					remote,
-					IssueScope::Opened,
-				));
 			}
-		} else {
-			self.state = LoadState::NeedToken;
+			View::Board => {
+				if matches!(self.board, Load::Loading)
+					&& !self.async_board.is_pending()
+				{
+					self.async_board
+						.spawn(AsyncBoardJob::new(remote));
+				}
+			}
 		}
 	}
 
-	/// Force a reload of the issue list.
-	fn reload(&self) {
-		if let Some(remote) = self.remote.clone() {
-			if has_token(&remote.host)
-				&& !self.async_issues.is_pending()
-			{
-				self.async_issues.spawn(AsyncIssuesJob::new(
-					remote,
-					IssueScope::Opened,
-				));
-			}
+	/// Force a reload of the active view.
+	fn reload(&mut self) {
+		match self.view {
+			View::List => self.list = Load::Loading,
+			View::Board => self.board = Load::Loading,
 		}
+		self.ensure_load();
+	}
+
+	fn toggle_view(&mut self) {
+		self.view = match self.view {
+			View::List => View::Board,
+			View::Board => View::List,
+		};
+		self.ensure_load();
 	}
 
 	fn show_token_prompt(&mut self) {
@@ -176,12 +209,14 @@ impl IssuesTab {
 			Ok(()) => {
 				self.token_input.clear();
 				self.token_input.hide();
-				self.state = LoadState::Loading;
+				self.token_error = None;
+				self.list = Load::Loading;
+				self.board = Load::Loading;
 				self.ensure_load();
 			}
 			Err(e) => {
 				self.token_input.hide();
-				self.state = LoadState::Error(format!(
+				self.token_error = Some(format!(
 					"could not store token in keyring: {e}"
 				));
 			}
@@ -238,11 +273,22 @@ impl IssuesTab {
 			AsyncGitLabNotification::Issues => {
 				if let Some(job) = self.async_issues.take_last() {
 					if let Some(result) = job.result() {
-						self.state = match result {
-							Ok(issues) => LoadState::Loaded(issues),
-							Err(e) => LoadState::Error(e),
+						self.list = match result {
+							Ok(issues) => Load::Loaded(issues),
+							Err(e) => Load::Error(e),
 						};
 						self.clamp_selection();
+					}
+				}
+			}
+			AsyncGitLabNotification::Board => {
+				if let Some(job) = self.async_board.take_last() {
+					if let Some(result) = job.result() {
+						self.board = match result {
+							Ok(cols) => Load::Loaded(cols),
+							Err(e) => Load::Error(e),
+						};
+						self.clamp_board_selection();
 					}
 				}
 			}
@@ -253,7 +299,6 @@ impl IssuesTab {
 							Ok(msg) => msg,
 							Err(e) => format!("error: {e}"),
 						});
-						// reflect the change in the list
 						self.reload();
 					}
 				}
@@ -264,22 +309,46 @@ impl IssuesTab {
 
 	pub fn any_work_pending(&self) -> bool {
 		self.async_issues.is_pending()
+			|| self.async_board.is_pending()
 			|| self.async_action.is_pending()
 	}
 
-	fn loaded(&self) -> Option<&[Issue]> {
-		match &self.state {
-			LoadState::Loaded(issues) => Some(issues),
+	fn list_issues(&self) -> Option<&[Issue]> {
+		match &self.list {
+			Load::Loaded(issues) => Some(issues),
 			_ => None,
 		}
 	}
 
+	fn board_columns(&self) -> Option<&[BoardColumn]> {
+		match &self.board {
+			Load::Loaded(cols) => Some(cols),
+			_ => None,
+		}
+	}
+
+	/// True when the active view has finished loading at least once.
+	fn content_loaded(&self) -> bool {
+		match self.view {
+			View::List => self.list_issues().is_some(),
+			View::Board => self.board_columns().is_some(),
+		}
+	}
+
 	fn selected_issue(&self) -> Option<&Issue> {
-		self.loaded().and_then(|i| i.get(self.selection))
+		match self.view {
+			View::List => {
+				self.list_issues().and_then(|i| i.get(self.selection))
+			}
+			View::Board => self
+				.board_columns()
+				.and_then(|c| c.get(self.board_col))
+				.and_then(|col| col.issues.get(self.board_row)),
+		}
 	}
 
 	fn clamp_selection(&mut self) {
-		let len = self.loaded().map_or(0, <[_]>::len);
+		let len = self.list_issues().map_or(0, <[_]>::len);
 		if len == 0 {
 			self.selection = 0;
 		} else if self.selection >= len {
@@ -287,8 +356,29 @@ impl IssuesTab {
 		}
 	}
 
+	fn clamp_board_selection(&mut self) {
+		let cols = self.board_columns().map_or(0, <[_]>::len);
+		if cols == 0 {
+			self.board_col = 0;
+			self.board_row = 0;
+			return;
+		}
+		if self.board_col >= cols {
+			self.board_col = cols - 1;
+		}
+		let rows = self
+			.board_columns()
+			.and_then(|c| c.get(self.board_col))
+			.map_or(0, |c| c.issues.len());
+		if rows == 0 {
+			self.board_row = 0;
+		} else if self.board_row >= rows {
+			self.board_row = rows - 1;
+		}
+	}
+
 	fn move_selection(&mut self, down: bool) {
-		let len = self.loaded().map_or(0, <[_]>::len);
+		let len = self.list_issues().map_or(0, <[_]>::len);
 		if len == 0 {
 			return;
 		}
@@ -297,6 +387,36 @@ impl IssuesTab {
 		} else {
 			self.selection =
 				self.selection.checked_sub(1).unwrap_or(len - 1);
+		}
+	}
+
+	fn move_board_col(&mut self, right: bool) {
+		let cols = self.board_columns().map_or(0, <[_]>::len);
+		if cols == 0 {
+			return;
+		}
+		if right {
+			self.board_col = (self.board_col + 1) % cols;
+		} else {
+			self.board_col =
+				self.board_col.checked_sub(1).unwrap_or(cols - 1);
+		}
+		self.board_row = 0;
+	}
+
+	fn move_board_row(&mut self, down: bool) {
+		let rows = self
+			.board_columns()
+			.and_then(|c| c.get(self.board_col))
+			.map_or(0, |c| c.issues.len());
+		if rows == 0 {
+			return;
+		}
+		if down {
+			self.board_row = (self.board_row + 1) % rows;
+		} else {
+			self.board_row =
+				self.board_row.checked_sub(1).unwrap_or(rows - 1);
 		}
 	}
 
@@ -312,14 +432,67 @@ impl IssuesTab {
 	}
 
 	fn title(&self) -> String {
+		let view = match self.view {
+			View::List => "list",
+			View::Board => "board",
+		};
 		self.remote.as_ref().map_or_else(
-			|| "Issues".to_string(),
-			|r| format!("Issues · {}", r.project_path),
+			|| format!("Issues ({view})"),
+			|r| format!("Issues · {} ({view})", r.project_path),
 		)
 	}
 
 	fn host(&self) -> &str {
 		self.remote.as_ref().map_or("", |r| r.host.as_str())
+	}
+
+	/// Split off a one-line footer for transient action feedback.
+	fn split_footer(&self, rect: Rect) -> (Rect, Option<Rect>) {
+		if self.status_msg.is_some() {
+			let chunks = Layout::default()
+				.direction(Direction::Vertical)
+				.constraints([
+					Constraint::Min(1),
+					Constraint::Length(1),
+				])
+				.split(rect);
+			(chunks[0], Some(chunks[1]))
+		} else {
+			(rect, None)
+		}
+	}
+
+	fn draw_footer(&self, f: &mut Frame, footer: Option<Rect>) {
+		if let (Some(rect), Some(msg)) =
+			(footer, self.status_msg.as_deref())
+		{
+			let p = Paragraph::new(msg)
+				.style(self.theme.text(true, false));
+			f.render_widget(p, rect);
+		}
+	}
+
+	fn issue_line(&self, issue: &Issue, selected: bool) -> Line<'_> {
+		let marker = match issue.state {
+			IssueState::Closed => "✗",
+			_ => "●",
+		};
+		let author = issue
+			.author
+			.as_ref()
+			.map_or_else(String::new, |a| format!(" @{}", a.username));
+		let comments = if issue.user_notes_count > 0 {
+			format!("  💬{}", issue.user_notes_count)
+		} else {
+			String::new()
+		};
+		Line::from(vec![Span::styled(
+			format!(
+				"{marker} #{}  {}{author}{comments}",
+				issue.iid, issue.title,
+			),
+			self.theme.text(true, selected),
+		)])
 	}
 
 	fn render_list(
@@ -328,49 +501,15 @@ impl IssuesTab {
 		rect: Rect,
 		issues: &[Issue],
 	) {
-		// split off a one-line footer for transient action feedback
-		let (list_area, footer) = self.status_msg.as_deref().map_or(
-			(rect, None),
-			|msg| {
-				let chunks = Layout::default()
-					.direction(Direction::Vertical)
-					.constraints([
-						Constraint::Min(1),
-						Constraint::Length(1),
-					])
-					.split(rect);
-				(chunks[0], Some((chunks[1], msg)))
-			},
-		);
+		let (list_area, footer) = self.split_footer(rect);
 
 		let items: Vec<ListItem> = issues
 			.iter()
 			.enumerate()
 			.map(|(i, issue)| {
-				let selected = i == self.selection;
-				let marker = match issue.state {
-					IssueState::Closed => "✗",
-					_ => "●",
-				};
-				let author = issue
-					.author
-					.as_ref()
-					.map_or_else(String::new, |a| {
-						format!(" @{}", a.username)
-					});
-				let comments = if issue.user_notes_count > 0 {
-					format!("  💬{}", issue.user_notes_count)
-				} else {
-					String::new()
-				};
-				let line = Line::from(vec![Span::styled(
-					format!(
-						"{marker} #{}  {}{author}{comments}",
-						issue.iid, issue.title,
-					),
-					self.theme.text(true, selected),
-				)]);
-				ListItem::new(line)
+				ListItem::new(
+					self.issue_line(issue, i == self.selection),
+				)
 			})
 			.collect();
 
@@ -380,73 +519,167 @@ impl IssuesTab {
 				.title(self.title()),
 		);
 		f.render_widget(list, list_area);
+		self.draw_footer(f, footer);
+	}
 
-		if let Some((rect, msg)) = footer {
-			let p = Paragraph::new(msg)
-				.style(self.theme.text(true, false));
-			f.render_widget(p, rect);
+	fn render_board(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+		columns: &[BoardColumn],
+	) {
+		let (board_area, footer) = self.split_footer(rect);
+
+		if columns.is_empty() {
+			self.draw_message(f, board_area, "No board columns.");
+			self.draw_footer(f, footer);
+			return;
 		}
+
+		let col_count = u32::try_from(columns.len()).unwrap_or(1);
+		let constraints: Vec<Constraint> = columns
+			.iter()
+			.map(|_| Constraint::Ratio(1, col_count))
+			.collect();
+		let areas = Layout::default()
+			.direction(Direction::Horizontal)
+			.constraints(constraints)
+			.split(board_area);
+
+		for (ci, (col, area)) in
+			columns.iter().zip(areas.iter()).enumerate()
+		{
+			let active_col = ci == self.board_col;
+			let items: Vec<ListItem> = col
+				.issues
+				.iter()
+				.enumerate()
+				.map(|(ri, issue)| {
+					let selected =
+						active_col && ri == self.board_row;
+					ListItem::new(self.issue_line(issue, selected))
+				})
+				.collect();
+
+			let title = format!("{} ({})", col.title, col.issues.len());
+			let block = Block::default()
+				.borders(Borders::ALL)
+				.title(Span::styled(
+					title,
+					self.theme.text(true, active_col),
+				));
+			f.render_widget(List::new(items).block(block), *area);
+		}
+
+		self.draw_footer(f, footer);
 	}
 }
 
 impl DrawableComponent for IssuesTab {
 	fn draw(&self, f: &mut Frame, rect: Rect) -> Result<()> {
-		match &self.state {
-			LoadState::NoRemote => self.draw_message(
+		// remote / token gating, shared by both views
+		if self.remote.is_none() {
+			self.draw_message(
 				f,
 				rect,
 				"No GitLab remote detected for this repository.",
-			),
-			LoadState::NeedToken => {
-				if self.token_input.is_visible() {
-					self.draw_message(
-						f,
-						rect,
-						&format!(
-							"A GitLab token is required for {}.",
-							self.host()
-						),
-					);
-					self.token_input.draw(f, rect)?;
-				} else {
-					self.draw_message(
-						f,
-						rect,
-						&strings::gitlab_token_help(
-							self.host(),
-							true,
-						),
-					);
-				}
-			}
-			LoadState::Loading => {
-				self.draw_message(f, rect, "Loading issues…");
-			}
-			LoadState::Error(e) => self.draw_message(
-				f,
-				rect,
-				&format!(
-					"Failed to load issues:\n{e}\n\nPress [Enter] to re-enter the token."
-				),
-			),
-			LoadState::Loaded(issues) if issues.is_empty() => {
+			);
+			return Ok(());
+		}
+
+		if !self.token_available() {
+			if self.token_input.is_visible() {
 				self.draw_message(
 					f,
 					rect,
-					"No open issues.\n\nPress [n] to create one.",
+					&format!(
+						"A GitLab token is required for {}.",
+						self.host()
+					),
+				);
+				self.token_input.draw(f, rect)?;
+			} else if let Some(err) = &self.token_error {
+				self.draw_message(
+					f,
+					rect,
+					&format!(
+						"{err}\n\nPress [Enter] to try again."
+					),
+				);
+			} else {
+				self.draw_message(
+					f,
+					rect,
+					&strings::gitlab_token_help(self.host(), true),
 				);
 			}
-			LoadState::Loaded(issues) => {
-				self.render_list(f, rect, issues);
-			}
+			return Ok(());
 		}
 
-		// new-issue input renders on top of the list when active
+		// token available: render the active view's content
+		let content = match self.view {
+			View::List => &self.list as &dyn LoadStatus,
+			View::Board => &self.board as &dyn LoadStatus,
+		};
+		match content.status() {
+			Status::Loading => self.draw_message(
+				f,
+				rect,
+				match self.view {
+					View::List => "Loading issues…",
+					View::Board => "Loading board…",
+				},
+			),
+			Status::Error(e) => self.draw_message(
+				f,
+				rect,
+				&format!("Failed to load:\n{e}\n\nPress [r] to retry."),
+			),
+			Status::Loaded => match self.view {
+				View::List => {
+					let issues = self.list_issues().unwrap_or(&[]);
+					if issues.is_empty() {
+						self.draw_message(
+							f,
+							rect,
+							"No open issues.\n\nPress [n] to create one, [b] for board view.",
+						);
+					} else {
+						self.render_list(f, rect, issues);
+					}
+				}
+				View::Board => {
+					let cols =
+						self.board_columns().unwrap_or(&[]);
+					self.render_board(f, rect, cols);
+				}
+			},
+		}
+
 		if self.new_issue_input.is_visible() {
 			self.new_issue_input.draw(f, rect)?;
 		}
 
 		Ok(())
+	}
+}
+
+/// Tiny view-agnostic adaptor over `Load<T>` for the shared draw branch.
+enum Status<'a> {
+	Loading,
+	Loaded,
+	Error(&'a str),
+}
+trait LoadStatus {
+	fn status(&self) -> Status<'_>;
+}
+impl<T> LoadStatus for Load<T> {
+	fn status(&self) -> Status<'_> {
+		match self {
+			Self::Loading => Status::Loading,
+			Self::Loaded(_) => Status::Loaded,
+			Self::Error(e) => Status::Error(e),
+		}
 	}
 }
 
@@ -459,18 +692,23 @@ impl Component for IssuesTab {
 		if self.visible || force_all {
 			out.push(CommandInfo::new(
 				strings::commands::scroll(&self.key_config),
-				self.loaded().is_some_and(|i| !i.is_empty()),
+				self.content_loaded(),
+				true,
+			));
+			out.push(CommandInfo::new(
+				strings::commands::issue_board(&self.key_config),
+				true,
 				true,
 			));
 			out.push(CommandInfo::new(
 				strings::commands::issue_new(&self.key_config),
 				true,
-				self.loaded().is_some(),
+				self.content_loaded(),
 			));
 			out.push(CommandInfo::new(
 				strings::commands::issue_close(&self.key_config),
 				self.selected_issue().is_some(),
-				self.loaded().is_some(),
+				self.content_loaded(),
 			));
 		}
 
@@ -519,21 +757,42 @@ impl Component for IssuesTab {
 		}
 
 		if let Event::Key(k) = ev {
+			let token_missing = !self.token_available();
+
 			if key_match(k, self.key_config.keys.move_down) {
-				self.move_selection(true);
+				match self.view {
+					View::List => self.move_selection(true),
+					View::Board => self.move_board_row(true),
+				}
 				return Ok(EventState::Consumed);
 			} else if key_match(k, self.key_config.keys.move_up) {
-				self.move_selection(false);
+				match self.view {
+					View::List => self.move_selection(false),
+					View::Board => self.move_board_row(false),
+				}
+				return Ok(EventState::Consumed);
+			} else if key_match(k, self.key_config.keys.move_right)
+				&& self.view == View::Board
+			{
+				self.move_board_col(true);
+				return Ok(EventState::Consumed);
+			} else if key_match(k, self.key_config.keys.move_left)
+				&& self.view == View::Board
+			{
+				self.move_board_col(false);
 				return Ok(EventState::Consumed);
 			} else if key_match(k, self.key_config.keys.enter)
-				&& matches!(
-					self.state,
-					LoadState::NeedToken | LoadState::Error(_)
-				) {
+				&& token_missing
+			{
 				self.show_token_prompt();
 				return Ok(EventState::Consumed);
+			} else if matches!(k.code, KeyCode::Char('b'))
+				&& !token_missing
+			{
+				self.toggle_view();
+				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('n'))
-				&& self.loaded().is_some()
+				&& self.content_loaded()
 			{
 				self.show_new_issue_prompt();
 				return Ok(EventState::Consumed);
@@ -543,7 +802,7 @@ impl Component for IssuesTab {
 				self.close_selected();
 				return Ok(EventState::Consumed);
 			} else if matches!(k.code, KeyCode::Char('r'))
-				&& self.loaded().is_some()
+				&& !token_missing
 			{
 				self.reload();
 				return Ok(EventState::Consumed);

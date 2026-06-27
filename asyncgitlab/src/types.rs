@@ -81,6 +81,34 @@ pub struct Issue {
 	pub assignees: Vec<User>,
 }
 
+/// A project label.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Label {
+	pub name: String,
+	#[serde(default)]
+	pub color: String,
+}
+
+/// A single column (list) of an issue board.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BoardList {
+	pub id: u64,
+	#[serde(default)]
+	pub label: Option<Label>,
+	#[serde(default)]
+	pub position: i64,
+}
+
+/// An issue board: an ordered set of label-backed lists.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Board {
+	pub id: u64,
+	#[serde(default)]
+	pub name: String,
+	#[serde(default)]
+	pub lists: Vec<BoardList>,
+}
+
 /// A note (comment) on an issue or merge request.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Note {

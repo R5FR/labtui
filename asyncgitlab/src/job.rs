@@ -7,6 +7,7 @@
 //! `AsyncSingleJob` and reads the result.
 
 use crate::{
+	board::{build_board, BoardColumn},
 	client::{
 		GitLabClient, IssueScope, MergeRequestScope, StateEvent,
 	},
@@ -29,6 +30,8 @@ pub enum AsyncGitLabNotification {
 	MergeRequests,
 	/// issue list finished loading
 	Issues,
+	/// issue board finished loading
+	Board,
 	/// a write action (create/close/comment/merge/…) finished
 	Action,
 }
@@ -38,6 +41,9 @@ pub type MergeRequestsResult = Result<Vec<MergeRequest>, String>;
 
 /// Result the UI reads after the issues job completes.
 pub type IssuesResult = Result<Vec<Issue>, String>;
+
+/// Result the UI reads after the board job completes.
+pub type BoardResult = Result<Vec<BoardColumn>, String>;
 
 /// Result of a write action: a human-readable success message, or an error.
 pub type ActionResult = Result<String, String>;
@@ -173,6 +179,79 @@ impl AsyncJob for AsyncIssuesJob {
 		}
 
 		Ok(AsyncGitLabNotification::Issues)
+	}
+}
+
+enum BoardJobState {
+	Request { remote: GitLabRemote },
+	Response(BoardResult),
+}
+
+/// Fetches the project's first issue board and buckets all issues into its
+/// columns, off the UI thread.
+#[derive(Clone)]
+pub struct AsyncBoardJob {
+	state: Arc<Mutex<Option<BoardJobState>>>,
+}
+
+impl AsyncBoardJob {
+	pub fn new(remote: GitLabRemote) -> Self {
+		Self {
+			state: Arc::new(Mutex::new(Some(
+				BoardJobState::Request { remote },
+			))),
+		}
+	}
+
+	/// Outcome of the job once finished; `None` while still pending.
+	pub fn result(&self) -> Option<BoardResult> {
+		let state = self.state.lock().ok()?;
+		match state.as_ref()? {
+			BoardJobState::Response(r) => Some(r.clone()),
+			BoardJobState::Request { .. } => None,
+		}
+	}
+
+	fn fetch(
+		remote: &GitLabRemote,
+	) -> Result<Vec<BoardColumn>, Error> {
+		let client = GitLabClient::from_env(remote.clone())?;
+		runtime::block_on(async {
+			let lists = client
+				.boards()
+				.await?
+				.into_iter()
+				.next()
+				.map(|b| b.lists)
+				.unwrap_or_default();
+			let issues = client.issues(IssueScope::All).await?;
+			Ok(build_board(&lists, issues))
+		})
+	}
+}
+
+impl AsyncJob for AsyncBoardJob {
+	type Notification = AsyncGitLabNotification;
+	type Progress = ();
+
+	fn run(
+		&mut self,
+		_params: RunParams<Self::Notification, Self::Progress>,
+	) -> GitResult<Self::Notification> {
+		if let Ok(mut state) = self.state.lock() {
+			*state = state.take().map(|state| match state {
+				BoardJobState::Request { remote } => {
+					let result = Self::fetch(&remote)
+						.map_err(|e| e.to_string());
+					BoardJobState::Response(result)
+				}
+				BoardJobState::Response(r) => {
+					BoardJobState::Response(r)
+				}
+			});
+		}
+
+		Ok(AsyncGitLabNotification::Board)
 	}
 }
 

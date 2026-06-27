@@ -168,6 +168,7 @@ impl MergeRequestsTab {
 				}
 			}
 			AsyncGitLabNotification::Issues
+			| AsyncGitLabNotification::Board
 			| AsyncGitLabNotification::Action => {}
 		}
 	}
