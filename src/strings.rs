@@ -105,6 +105,24 @@ pub fn tab_issues(key_config: &SharedKeyConfig) -> String {
 		key_config.get_hint(key_config.keys.tab_issues)
 	)
 }
+/// Short how-to shown when no GitLab token is available for `host`.
+/// `write` selects the recommended scope (write actions need `api`).
+pub fn gitlab_token_help(host: &str, write: bool) -> String {
+	let scope = if write {
+		"the `api` scope (or `read_api` for read-only browsing)"
+	} else {
+		"the `read_api` scope (use `api` to also allow write actions)"
+	};
+	format!(
+		"A GitLab token is required for {host}.\n\n\
+		 How to create one:\n\
+		 1. Open  https://{host}/-/user_settings/personal_access_tokens\n\
+		 2. Give it a name (e.g. \"labtui\") and an expiry date\n\
+		 3. Select {scope}\n\
+		 4. Click \"Create personal access token\" and copy it\n\n\
+		 Press [Enter] to paste it here."
+	)
+}
 pub fn tab_divider(_key_config: &SharedKeyConfig) -> String {
 	" | ".to_string()
 }

@@ -293,9 +293,9 @@ impl DrawableComponent for MergeRequestsTab {
 					self.draw_message(
 						f,
 						rect,
-						&format!(
-							"A GitLab token is required for {}.\n\nPress [Enter] to set it.",
-							self.host()
+						&strings::gitlab_token_help(
+							self.host(),
+							false,
 						),
 					);
 				}
