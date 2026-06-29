@@ -264,40 +264,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "asyncgit"
-version = "0.28.1"
-dependencies = [
- "bitflags 2.10.0",
- "crossbeam-channel",
- "dirs",
- "easy-cast",
- "env_logger",
- "fuzzy-matcher",
- "git2",
- "git2-hooks",
- "gix",
- "invalidstring",
- "log",
- "openssl-sys",
- "pretty_assertions",
- "rayon",
- "rayon-core",
- "scopetime",
- "serde",
- "serial_test",
- "ssh-key",
- "tempfile",
- "thiserror 2.0.18",
- "unicode-truncate",
- "url",
-]
-
-[[package]]
 name = "asyncgitlab"
 version = "0.1.0"
 dependencies = [
- "asyncgit",
  "keyring",
+ "labtui-asyncgit",
  "log",
  "reqwest",
  "serde",
@@ -1585,20 +1556,6 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "url",
-]
-
-[[package]]
-name = "git2-hooks"
-version = "0.7.0"
-dependencies = [
- "git2",
- "git2-testing",
- "gix-path",
- "log",
- "pretty_assertions",
- "shellexpand",
- "tempfile",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2969,7 +2926,6 @@ name = "labtui"
 version = "0.28.1"
 dependencies = [
  "anyhow",
- "asyncgit",
  "asyncgitlab",
  "backtrace",
  "base64",
@@ -2991,6 +2947,7 @@ dependencies = [
  "indexmap",
  "insta",
  "itertools",
+ "labtui-asyncgit",
  "log",
  "notify",
  "notify-debouncer-mini",
@@ -3014,6 +2971,49 @@ dependencies = [
  "unicode-truncate",
  "unicode-width 0.2.0",
  "which",
+]
+
+[[package]]
+name = "labtui-asyncgit"
+version = "0.28.1"
+dependencies = [
+ "bitflags 2.10.0",
+ "crossbeam-channel",
+ "dirs",
+ "easy-cast",
+ "env_logger",
+ "fuzzy-matcher",
+ "git2",
+ "gix",
+ "invalidstring",
+ "labtui-git2-hooks",
+ "log",
+ "openssl-sys",
+ "pretty_assertions",
+ "rayon",
+ "rayon-core",
+ "scopetime",
+ "serde",
+ "serial_test",
+ "ssh-key",
+ "tempfile",
+ "thiserror 2.0.18",
+ "unicode-truncate",
+ "url",
+]
+
+[[package]]
+name = "labtui-git2-hooks"
+version = "0.7.0"
+dependencies = [
+ "git2",
+ "git2-testing",
+ "gix-path",
+ "log",
+ "pretty_assertions",
+ "shellexpand",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

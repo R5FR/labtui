@@ -1,11 +1,11 @@
 [package]
-name = "git2-hooks"
+name = "labtui-git2-hooks"
 version = "0.7.0"
 authors = ["extrawurst <mail@rusticorn.com>"]
 edition = "2021"
 description = "adds git hooks support based on git2-rs"
-homepage = "https://github.com/gitui-org/gitui"
-repository = "https://github.com/gitui-org/gitui"
+homepage = "https://github.com/R5FR/labtui"
+repository = "https://github.com/R5FR/labtui"
 documentation = "https://docs.rs/git2-hooks/"
 readme = "README.md"
 license = "MIT"
