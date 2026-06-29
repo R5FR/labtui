@@ -450,11 +450,14 @@ impl MergeRequestsTab {
 			}
 			AsyncGitLabNotification::MrChanges => {
 				if let Some(job) = self.async_changes.take_last() {
-					if let Some(result) = job.result() {
-						self.changes = Some(match result {
-							Ok(c) => Load::Loaded(c.changes),
-							Err(e) => Load::Error(e),
-						});
+					// ignore the result if the user already closed the diff
+					if self.changes.is_some() {
+						if let Some(result) = job.result() {
+							self.changes = Some(match result {
+								Ok(c) => Load::Loaded(c.changes),
+								Err(e) => Load::Error(e),
+							});
+						}
 					}
 				}
 			}
@@ -606,13 +609,9 @@ impl MergeRequestsTab {
 					.map_or_else(String::new, |a| {
 						format!(" @{}", a.username)
 					});
-				let ci = mr.head_pipeline.as_ref().map_or_else(
-					String::new,
-					|p| format!("  {}", ci_marker(p.status)),
-				);
 				let line = Line::from(vec![Span::styled(
 					format!(
-						"{} !{}  {}  ({} → {}){author}{ci}",
+						"{} !{}  {}  ({} → {}){author}",
 						Self::marker(mr),
 						mr.iid,
 						mr.title,
@@ -814,7 +813,7 @@ impl MergeRequestsTab {
 				header,
 			));
 			for l in file.diff.lines() {
-				lines.push(Line::styled(l.to_string(), style));
+				lines.push(Line::styled(l, style));
 			}
 		}
 
@@ -928,6 +927,13 @@ impl DrawableComponent for MergeRequestsTab {
 			),
 			Load::Loaded(mrs) if mrs.is_empty() => {
 				self.draw_message(f, rect, "No open merge requests.");
+			}
+			Load::Loaded(_) if self.filtered().is_empty() => {
+				self.draw_message(
+					f,
+					rect,
+					"No matching merge requests.\n\nPress [f] to change the filter.",
+				);
 			}
 			Load::Loaded(_) => self.render_list(f, rect),
 		}

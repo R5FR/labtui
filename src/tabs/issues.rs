@@ -1029,11 +1029,12 @@ impl DrawableComponent for IssuesTab {
 			Status::Loaded => match self.view {
 				View::List => {
 					if self.filtered_issues().is_empty() {
-						self.draw_message(
-							f,
-							rect,
-							"No matching issues.\n\nPress [n] to create one, [b] for board view, [f] to filter.",
-						);
+						let msg = if self.filter.is_empty() {
+							"No open issues.\n\nPress [n] to create one, [b] for board view, [f] to filter."
+						} else {
+							"No matching issues.\n\nPress [f] to change the filter."
+						};
+						self.draw_message(f, rect, msg);
 					} else {
 						self.render_list(f, rect);
 					}

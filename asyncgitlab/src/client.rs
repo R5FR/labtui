@@ -450,7 +450,7 @@ impl GitLabClient {
 			Some(r) => format!(
 				"/repository/commits?with_stats=false&ref_name={r}"
 			),
-			None => "/repository/commits".to_string(),
+			None => "/repository/commits?with_stats=false".to_string(),
 		};
 		self.get_paginated(&self.project_url(&suffix)).await
 	}

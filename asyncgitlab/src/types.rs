@@ -232,6 +232,8 @@ pub struct Commit {
 	#[serde(default)]
 	pub created_at: String,
 	#[serde(default)]
+	pub web_url: String,
+	#[serde(default)]
 	pub last_pipeline: Option<Pipeline>,
 }
 

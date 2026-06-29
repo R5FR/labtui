@@ -201,6 +201,13 @@ impl PipelinesTab {
 	}
 
 	fn toggle_section(&mut self) {
+		// leave any drilled-in sub-view so toggling returns to the list
+		self.jobs = None;
+		self.jobs_pipeline_id = None;
+		self.trace = None;
+		self.trace_job_id = None;
+		self.trace_scroll = 0;
+		self.statuses = None;
 		self.section = match self.section {
 			Section::Pipelines => Section::Commits,
 			Section::Commits => Section::Pipelines,
@@ -232,15 +239,7 @@ impl PipelinesTab {
 	}
 
 	fn reload_statuses(&mut self) {
-		let (Some(sha), Some(remote)) = (
-			self.selected_commit().map(|c| c.id.clone()),
-			self.remote.clone(),
-		) else {
-			return;
-		};
-		self.statuses = Some(Load::Loading);
-		self.async_statuses
-			.spawn(AsyncCommitStatusesJob::new(remote, sha));
+		self.open_statuses();
 	}
 
 	/// Trigger a new pipeline on the typed ref.
@@ -510,11 +509,14 @@ impl PipelinesTab {
 			}
 			AsyncGitLabNotification::CommitStatuses => {
 				if let Some(job) = self.async_statuses.take_last() {
-					if let Some(result) = job.result() {
-						self.statuses = Some(match result {
-							Ok(s) => Load::Loaded(s),
-							Err(e) => Load::Error(e),
-						});
+					// ignore the result if the user already closed the view
+					if self.statuses.is_some() {
+						if let Some(result) = job.result() {
+							self.statuses = Some(match result {
+								Ok(s) => Load::Loaded(s),
+								Err(e) => Load::Error(e),
+							});
+						}
 					}
 				}
 			}
@@ -747,17 +749,13 @@ impl PipelinesTab {
 			.iter()
 			.enumerate()
 			.map(|(i, c)| {
-				let ci = c.last_pipeline.as_ref().map_or_else(
-					|| "·".to_string(),
-					|p| ci_marker(p.status).to_string(),
-				);
 				let short = if c.short_id.is_empty() {
 					c.id.chars().take(8).collect::<String>()
 				} else {
 					c.short_id.clone()
 				};
 				ListItem::new(Line::from(vec![Span::styled(
-					format!("{ci} {short}  {}", c.title),
+					format!("{short}  {}", c.title),
 					self.theme.text(
 						true,
 						i == self.commit_selection,
@@ -1188,8 +1186,7 @@ impl PipelinesTab {
 		} else if matches!(k.code, KeyCode::Char('o')) {
 			if let Some(url) = self
 				.selected_commit()
-				.and_then(|c| c.last_pipeline.as_ref())
-				.map(|p| p.web_url.clone())
+				.map(|c| c.web_url.clone())
 				.filter(|u| !u.is_empty())
 			{
 				if let Err(e) =
