@@ -100,6 +100,14 @@ GitLab tabs appear **automatically** the moment a GitLab remote is detected — 
 - A C compiler and Perl ≥ 5.12 *(only for the vendored OpenSSL fallback)*
 - Python (invocable as `python`) — to run the full test suite
 
+**Install from crates.io** (recommended)
+
+```sh
+cargo install labtui --locked
+```
+
+**Build from source**
+
 ```sh
 cargo build --release
 ```
@@ -112,7 +120,7 @@ The binary is written to `target/release/labtui`.
 > cargo build --release --no-default-features
 > ```
 
-**Install locally**
+**Install locally from source**
 
 ```sh
 cargo install --path . --locked
