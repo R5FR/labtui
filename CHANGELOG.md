@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+* GitLab integration (labtui): Merge Requests tab with list, filters, detail view, diff view, comments, label editing, and pipeline triggering
+* GitLab Issues tab with board view (columns by label), issue detail, and comment threads
+* GitLab CI/CD pipelines tab
+* GitLab API token storage via the OS credential store (keyring), with an in-app setup flow when no token is configured
+
 ### Changed
 * use [tombi](https://github.com/tombi-toml/tombi) for all toml file formatting
 * open the external editor from the status diff view [[@WaterWhisperer](https://github.com/WaterWhisperer)] ([#2805](https://github.com/gitui-org/gitui/issues/2805))
