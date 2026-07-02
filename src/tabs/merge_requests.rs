@@ -829,91 +829,89 @@ impl MergeRequestsTab {
 		);
 		self.draw_footer(f, footer);
 	}
-}
 
-impl DrawableComponent for MergeRequestsTab {
-	fn draw(&self, f: &mut Frame, rect: Rect) -> Result<()> {
-		if self.remote.is_none() {
+	fn draw_token_gate(&self, f: &mut Frame, rect: Rect) -> Result<()> {
+		if self.token_input.is_visible() {
 			self.draw_message(
 				f,
 				rect,
-				"No GitLab remote detected for this repository.",
+				&format!(
+					"A GitLab token is required for {}.",
+					self.host()
+				),
 			);
-			return Ok(());
+			self.token_input.draw(f, rect)?;
+		} else if let Some(err) = &self.token_error {
+			self.draw_message(
+				f,
+				rect,
+				&format!("{err}\n\nPress [Enter] to try again."),
+			);
+		} else {
+			self.draw_message(
+				f,
+				rect,
+				&strings::gitlab_token_help(self.host(), true),
+			);
 		}
+		Ok(())
+	}
 
-		if !self.token_available() {
-			if self.token_input.is_visible() {
-				self.draw_message(
-					f,
-					rect,
-					&format!(
-						"A GitLab token is required for {}.",
-						self.host()
-					),
-				);
-				self.token_input.draw(f, rect)?;
-			} else if let Some(err) = &self.token_error {
-				self.draw_message(
-					f,
-					rect,
-					&format!(
-						"{err}\n\nPress [Enter] to try again."
-					),
-				);
-			} else {
-				self.draw_message(
-					f,
-					rect,
-					&strings::gitlab_token_help(self.host(), true),
-				);
+	/// draws the diff view when it is open; returns `true` if it took over the frame
+	fn draw_changes_overlay(&self, f: &mut Frame, rect: Rect) -> bool {
+		let Some(changes) = &self.changes else {
+			return false;
+		};
+		match changes {
+			Load::Loading => {
+				self.draw_message(f, rect, "Loading changes…");
 			}
-			return Ok(());
+			Load::Error(e) => self.draw_message(
+				f,
+				rect,
+				&format!("Failed to load changes:\n{e}"),
+			),
+			Load::Loaded(files) => {
+				self.render_changes(f, rect, files);
+			}
 		}
+		true
+	}
 
-		// diff view takes over while open
-		if let Some(changes) = &self.changes {
-			match changes {
-				Load::Loading => {
-					self.draw_message(f, rect, "Loading changes…");
-				}
-				Load::Error(e) => self.draw_message(
-					f,
-					rect,
-					&format!("Failed to load changes:\n{e}"),
+	/// draws the MR detail view when it is open; returns `true` if it took over the frame
+	fn draw_detail_overlay(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+	) -> Result<bool> {
+		let Some(detail) = &self.detail else {
+			return Ok(false);
+		};
+		match detail {
+			Load::Loading => {
+				self.draw_message(f, rect, "Loading merge request…");
+			}
+			Load::Error(e) => self.draw_message(
+				f,
+				rect,
+				&format!(
+					"Failed to load merge request:\n{e}\n\nPress [Esc] to go back."
 				),
-				Load::Loaded(files) => {
-					self.render_changes(f, rect, files);
-				}
+			),
+			Load::Loaded(data) => {
+				self.render_detail(f, rect, data);
 			}
-			return Ok(());
 		}
-
-		if let Some(detail) = &self.detail {
-			match detail {
-				Load::Loading => {
-					self.draw_message(f, rect, "Loading merge request…");
-				}
-				Load::Error(e) => self.draw_message(
-					f,
-					rect,
-					&format!(
-						"Failed to load merge request:\n{e}\n\nPress [Esc] to go back."
-					),
-				),
-				Load::Loaded(data) => {
-					self.render_detail(f, rect, data);
-				}
-			}
-			if self.comment_input.is_visible() {
-				self.comment_input.draw(f, rect)?;
-			}
-			if self.label_input.is_visible() {
-				self.label_input.draw(f, rect)?;
-			}
-			return Ok(());
+		if self.comment_input.is_visible() {
+			self.comment_input.draw(f, rect)?;
 		}
+		if self.label_input.is_visible() {
+			self.label_input.draw(f, rect)?;
+		}
+		Ok(true)
+	}
 
+	fn draw_list_view(&self, f: &mut Frame, rect: Rect) -> Result<()> {
 		match &self.list {
 			Load::Loading => {
 				self.draw_message(f, rect, "Loading merge requests…");
@@ -943,6 +941,35 @@ impl DrawableComponent for MergeRequestsTab {
 		}
 
 		Ok(())
+	}
+}
+
+impl DrawableComponent for MergeRequestsTab {
+	fn draw(&self, f: &mut Frame, rect: Rect) -> Result<()> {
+		if self.remote.is_none() {
+			self.draw_message(
+				f,
+				rect,
+				"No GitLab remote detected for this repository.",
+			);
+			return Ok(());
+		}
+
+		if !self.token_available() {
+			self.draw_token_gate(f, rect)?;
+			return Ok(());
+		}
+
+		// diff view takes over while open
+		if self.draw_changes_overlay(f, rect) {
+			return Ok(());
+		}
+
+		if self.draw_detail_overlay(f, rect)? {
+			return Ok(());
+		}
+
+		self.draw_list_view(f, rect)
 	}
 }
 
