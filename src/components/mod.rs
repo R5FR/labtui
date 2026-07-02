@@ -1,5 +1,5 @@
 /*!
-Components are the visible building blocks in gitui.
+Components are the visible building blocks in labtui.
 
 They have a state, handle events, and render to the terminal:
 
@@ -14,13 +14,13 @@ For example, [`CommitList`] is used in both tab "revlog" and tab "stashlist".
 
 ## Composition
 
-In gitui, composition is driven by code. This means each component must
+In labtui, composition is driven by code. This means each component must
 have code that explicitly forwards component function calls like draw,
 commands and event to the components it is composed of.
 
 Other systems use composition by data: They provide a generic data structure
 that reflects the visual hierarchy, and uses it at runtime to
-determine which code should be executed. This is not how gitui works.
+determine which code should be executed. This is not how labtui works.
 
 ## Traits
 

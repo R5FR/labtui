@@ -1,5 +1,5 @@
 <!---
-Thank you for contributing to GitUI! Please fill out the template below, and remove or add any
+Thank you for contributing to labtui! Please fill out the template below, and remove or add any
 information as you feel necessary.
 --->
 

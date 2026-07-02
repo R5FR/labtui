@@ -2,7 +2,7 @@
 
 *log runtime of arbitrary scope*
 
-This crate is part of the [gitui](http://gitui.org) project and can be used to annotate arbitrary scopes to `trace` their execution times via `log`:
+This crate is part of the [labtui](https://github.com/R5FR/labtui) project and can be used to annotate arbitrary scopes to `trace` their execution times via `log`:
 
 in your crate:
 ```

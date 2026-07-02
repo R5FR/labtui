@@ -5,7 +5,7 @@ use std::{fs::canonicalize, path::PathBuf, rc::Rc};
 use crate::{args::get_app_config_path, strings::symbol};
 
 use super::{
-	key_list::{GituiKeyEvent, KeysList},
+	key_list::{LabtuiKeyEvent, KeysList},
 	symbols::KeySymbols,
 };
 
@@ -73,7 +73,7 @@ impl KeyConfig {
 		}
 	}
 
-	pub fn get_hint(&self, ev: GituiKeyEvent) -> String {
+	pub fn get_hint(&self, ev: LabtuiKeyEvent) -> String {
 		match ev.code {
 			KeyCode::Down
 			| KeyCode::Up
@@ -138,7 +138,7 @@ mod tests {
 	#[test]
 	fn test_get_hint() {
 		let config = KeyConfig::default();
-		let h = config.get_hint(GituiKeyEvent::new(
+		let h = config.get_hint(LabtuiKeyEvent::new(
 			KeyCode::Char('c'),
 			KeyModifiers::CONTROL,
 		));
@@ -227,7 +227,7 @@ mod tests {
 			let loaded_config = KeyConfig::init(None, None).unwrap();
 			assert_eq!(
 				loaded_config.keys.move_down,
-				GituiKeyEvent::new(
+				LabtuiKeyEvent::new(
 					KeyCode::Char('j'),
 					KeyModifiers::CONTROL
 				)
@@ -238,7 +238,7 @@ mod tests {
 			let loaded_config = KeyConfig::init(None, None).unwrap();
 			assert_eq!(
 				loaded_config.keys.move_down,
-				GituiKeyEvent::new(
+				LabtuiKeyEvent::new(
 					KeyCode::Char('j'),
 					KeyModifiers::CONTROL
 				)

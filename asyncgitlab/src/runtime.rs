@@ -1,7 +1,7 @@
 //! A process-wide tokio runtime so the synchronous `AsyncJob::run` (which
-//! executes on gitui's threadpool) can drive the async reqwest client.
+//! executes on labtui's threadpool) can drive the async reqwest client.
 //!
-//! gitui's job model is "blocking work on a worker thread"; reqwest is async.
+//! labtui's job model is "blocking work on a worker thread"; reqwest is async.
 //! We bridge the two by `block_on`-ing on a shared multi-thread runtime instead
 //! of spinning up a runtime per request.
 

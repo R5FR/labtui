@@ -41,7 +41,7 @@ jobs:
       - name: Build
         if: matrix.os != 'ubuntu-22.04'
         env:
-          GITUI_RELEASE: 1
+          LABTUI_RELEASE: 1
         run: cargo build
       - name: Run tests
         if: matrix.os != 'ubuntu-22.04'
@@ -77,36 +77,36 @@ jobs:
       - name: Build Release Mac
         if: matrix.os == 'macos-latest'
         env:
-          GITUI_RELEASE: 1
+          LABTUI_RELEASE: 1
         run: make release-mac
       - name: Build Release Mac x86
         if: matrix.os == 'macos-latest'
         env:
-          GITUI_RELEASE: 1
+          LABTUI_RELEASE: 1
         run: |
           rustup target add x86_64-apple-darwin
           make release-mac-x86
       - name: Build Release Linux
         if: matrix.os == 'ubuntu-latest'
         env:
-          GITUI_RELEASE: 1
+          LABTUI_RELEASE: 1
         run: make release-linux-musl
       - name: Build Release Win
         if: matrix.os == 'windows-latest'
         env:
-          GITUI_RELEASE: 1
+          LABTUI_RELEASE: 1
         run: make release-win
       - name: Build Release Linux ARM
         if: matrix.os == 'ubuntu-22.04'
         env:
-          GITUI_RELEASE: 1
+          LABTUI_RELEASE: 1
         run: make release-linux-arm
 
       - name: Set SHA
         if: matrix.os == 'macos-latest'
         id: shasum
         run: |
-          echo sha="$(shasum -a 256 ./release/gitui-mac.tar.gz | awk '{printf $1}')" >> $GITHUB_OUTPUT
+          echo sha="$(shasum -a 256 ./release/labtui-mac.tar.gz | awk '{printf $1}')" >> $GITHUB_OUTPUT
 
       - name: Extract release notes
         if: matrix.os == 'ubuntu-latest'
@@ -129,6 +129,6 @@ jobs:
         env:
           COMMITTER_TOKEN: ${{ secrets.BREW_TOKEN }}
         with:
-          formula-name: gitui
+          formula-name: labtui
           # https://github.com/mislav/bump-homebrew-formula-action/issues/58
-          formula-path: Formula/g/gitui.rb
+          formula-path: Formula/l/labtui.rb

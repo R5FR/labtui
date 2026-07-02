@@ -303,7 +303,7 @@ mod tests {
 	fn repo_init() -> Result<(TempDir, Repository)> {
 		let mut os_string: OsString = OsString::new();
 
-		os_string.push("gitui $# ' ");
+		os_string.push("labtui $# ' ");
 
 		#[cfg(target_os = "linux")]
 		{

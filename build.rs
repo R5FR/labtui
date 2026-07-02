@@ -33,7 +33,7 @@ fn main() {
 	};
 	let build_date = now.date_naive();
 
-	let build_name = if std::env::var("GITUI_RELEASE").is_ok() {
+	let build_name = if std::env::var("LABTUI_RELEASE").is_ok() {
 		env!("CARGO_PKG_VERSION").to_string()
 	} else {
 		format!(
@@ -45,5 +45,5 @@ fn main() {
 	};
 
 	println!("cargo:warning=buildname '{build_name}'");
-	println!("cargo:rustc-env=GITUI_BUILD_NAME={build_name}");
+	println!("cargo:rustc-env=LABTUI_BUILD_NAME={build_name}");
 }

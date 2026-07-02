@@ -1,4 +1,4 @@
-//! asyncgitlab — the GitLab API layer for labtui (a gitui fork).
+//! asyncgitlab — the GitLab API layer for labtui.
 //!
 //! Phase 0/1 foundation:
 //!   - [`remote`]  parse a git remote URL into host + project path
@@ -6,7 +6,7 @@
 //!   - [`client`]  async REST client (reqwest + rustls)
 //!   - [`types`]   trimmed deserialization structs
 //!
-//! The client is plain `async`. Later it gets wrapped in gitui's `AsyncJob`
+//! The client is plain `async`. Later it gets wrapped in labtui's `AsyncJob`
 //! pattern so calls run off the UI thread and report back over a channel.
 
 pub mod board;

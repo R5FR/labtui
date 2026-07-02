@@ -69,25 +69,25 @@ jobs:
       - name: Binary Size (unix)
         if: matrix.os != 'windows-latest'
         run: |
-          ls -l ./target/release/gitui
+          ls -l ./target/release/labtui
 
       - name: Binary Size (win)
         if: matrix.os == 'windows-latest'
         run: |
-          ls -l ./target/release/gitui.exe
+          ls -l ./target/release/labtui.exe
 
       - name: Binary dependencies (mac)
         if: matrix.os == 'macos-latest'
         run: |
-          otool -L ./target/release/gitui
+          otool -L ./target/release/labtui
 
       - name: Build MSI (windows)
         if: matrix.os == 'windows-latest'
         run: |
           cargo install cargo-wix --version 0.3.3 --locked
           cargo wix --version
-          cargo wix -p gitui --no-build --nocapture --output ./target/wix/gitui-win.msi
-          ls -l ./target/wix/gitui-win.msi
+          cargo wix -p labtui --no-build --nocapture --output ./target/wix/labtui-win.msi
+          ls -l ./target/wix/labtui-win.msi
 
   build-linux-musl:
     runs-on: ubuntu-latest
@@ -131,12 +131,12 @@ jobs:
       - name: Build Debug
         run: |
           make build-linux-musl-debug
-          ./target/x86_64-unknown-linux-musl/debug/gitui --version
+          ./target/x86_64-unknown-linux-musl/debug/labtui --version
       - name: Build Release
         run: |
           make build-linux-musl-release
-          ./target/x86_64-unknown-linux-musl/release/gitui --version
-          ls -l ./target/x86_64-unknown-linux-musl/release/gitui
+          ./target/x86_64-unknown-linux-musl/release/labtui --version
+          ls -l ./target/x86_64-unknown-linux-musl/release/labtui
       - name: Test
         run: |
           make test-linux-musl
@@ -192,7 +192,7 @@ jobs:
       - name: Build Release
         run: |
           make build-linux-arm-release
-          ls -l ./target/aarch64-unknown-linux-gnu/release/gitui || ls -l ./target/armv7-unknown-linux-gnueabihf/release/gitui || ls -l ./target/arm-unknown-linux-gnueabihf/release/gitui
+          ls -l ./target/aarch64-unknown-linux-gnu/release/labtui || ls -l ./target/armv7-unknown-linux-gnueabihf/release/labtui || ls -l ./target/arm-unknown-linux-gnueabihf/release/labtui
 
   build-apple-x86:
     runs-on: macos-latest
@@ -231,7 +231,7 @@ jobs:
       - name: Build Release
         run: |
           make build-apple-x86-release
-          ls -l ./target/x86_64-apple-darwin/release/gitui
+          ls -l ./target/x86_64-apple-darwin/release/labtui
 
   linting:
     name: Lints
@@ -321,5 +321,5 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Let Homebrew build gitui from source
-        run: brew install --build-from-source gitui
+      - name: Let Homebrew build labtui from source
+        run: brew install --build-from-source labtui

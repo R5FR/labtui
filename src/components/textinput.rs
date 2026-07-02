@@ -107,7 +107,7 @@ impl TextInputComponent {
 		// the fancy footwork with the OnceCell is to allow
 		// the reading of msg as a &str.
 		// tui_textarea returns its lines to the caller as &[String]
-		// gitui wants &str of \n delimited text
+		// labtui wants &str of \n delimited text
 		// it would be simple if this was a mut method. You could
 		// just load up msg from the lines area and return an &str pointing at it
 		// but its not a mut method. So we need to store the text in a OnceCell

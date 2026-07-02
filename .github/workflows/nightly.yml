@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  AWS_BUCKET_NAME: s3://gitui/nightly/
+  AWS_BUCKET_NAME: s3://labtui/nightly/
 
 jobs:
   release:
@@ -91,9 +91,9 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KEY_SECRET }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          aws s3 cp ./release/gitui-linux-armv7.tar.gz $AWS_BUCKET_NAME
-          aws s3 cp ./release/gitui-linux-arm.tar.gz $AWS_BUCKET_NAME
-          aws s3 cp ./release/gitui-linux-aarch64.tar.gz $AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-linux-armv7.tar.gz $AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-linux-arm.tar.gz $AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-linux-aarch64.tar.gz $AWS_BUCKET_NAME
 
       - name: Ubuntu Latest Upload Artifact
         if: matrix.os == 'ubuntu-latest'
@@ -102,7 +102,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KEY_SECRET }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          aws s3 cp ./release/gitui-linux-x86_64.tar.gz $AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-linux-x86_64.tar.gz $AWS_BUCKET_NAME
 
       - name: MacOS Upload Artifact
         if: matrix.os == 'macos-latest'
@@ -111,8 +111,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KEY_SECRET }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          aws s3 cp ./release/gitui-mac.tar.gz $AWS_BUCKET_NAME
-          aws s3 cp ./release/gitui-mac-x86.tar.gz $AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-mac.tar.gz $AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-mac-x86.tar.gz $AWS_BUCKET_NAME
 
       - name: Windows Upload Artifact
         if: matrix.os == 'windows-latest'
@@ -121,5 +121,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KEY_SECRET }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          aws s3 cp ./release/gitui-win.msi $env:AWS_BUCKET_NAME
-          aws s3 cp ./release/gitui-win.tar.gz $env:AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-win.msi $env:AWS_BUCKET_NAME
+          aws s3 cp ./release/labtui-win.tar.gz $env:AWS_BUCKET_NAME

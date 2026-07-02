@@ -33,9 +33,9 @@
 
     <Product
         Id='*'
-        Name='gitui'
+        Name='labtui'
         UpgradeCode='C1CADE63-A601-4E02-96CC-FB921D5B174E'
-        Manufacturer='gitui-org'
+        Manufacturer='labtui'
         Language='1033'
         Codepage='1252'
         Version='$(var.Version)'>
@@ -43,7 +43,7 @@
         <Package Id='*'
             Keywords='Installer'
             Description='blazing fast terminal-ui for git'
-            Manufacturer='gitui-org'
+            Manufacturer='labtui'
             InstallerVersion='450'
             Languages='1033'
             Compressed='yes'
@@ -56,11 +56,11 @@
             DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
-        <Property Id='DiskPrompt' Value='gitui Installation'/>
+        <Property Id='DiskPrompt' Value='labtui Installation'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
-                <Directory Id='APPLICATIONFOLDER' Name='gitui'>
+                <Directory Id='APPLICATIONFOLDER' Name='labtui'>
                     <!--
                       Disabling the license sidecar file in the installer is a two step process:
 
@@ -90,9 +90,9 @@
                         <Component Id='binary0' Guid='*' Win64='$(var.Win64)'>
                             <File
                                 Id='exe0'
-                                Name='gitui.exe'
+                                Name='labtui.exe'
                                 DiskId='1'
-                                Source='target\$(var.Profile)\gitui.exe'
+                                Source='target\$(var.Profile)\labtui.exe'
                                 KeyPath='yes'/>
                         </Component>
                     </Directory>
@@ -151,7 +151,7 @@
         <!--<Icon Id='ProductICO' SourceFile='wix\Product.ico'/>-->
         <!--<Property Id='ARPPRODUCTICON' Value='ProductICO' />-->
 
-        <Property Id='ARPHELPLINK' Value='https://github.com/gitui-org/gitui'/>
+        <Property Id='ARPHELPLINK' Value='https://github.com/R5FR/labtui'/>
         
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>

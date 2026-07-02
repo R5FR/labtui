@@ -1,6 +1,6 @@
 # asyncgitlab
 
-Async GitLab API layer for **labtui** (a [gitui](https://github.com/gitui-org/gitui) fork).
+Async GitLab API layer for **labtui**.
 
 Provides:
 
@@ -8,7 +8,7 @@ Provides:
 - `config` — resolve an access token (`GITLAB_TOKEN` or per-host `GITLAB_TOKEN_<HOST>`)
 - `client` — async REST client (`reqwest` + `rustls`): GET/POST/PUT/DELETE helpers and
   automatic pagination (follows `X-Next-Page`)
-- `job` — `AsyncJob` wrappers so GitLab calls run on gitui's threadpool
+- `job` — `AsyncJob` wrappers so GitLab calls run on labtui's threadpool
 - `types` — trimmed serde deserialization targets
 
 ## API coverage

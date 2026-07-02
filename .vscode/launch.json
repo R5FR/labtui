@@ -5,7 +5,7 @@
             "name": "(OSX) Launch",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceRoot}/target/debug/gitui",
+            "program": "${workspaceRoot}/target/debug/labtui",
             "args": [],
             "cwd": "${workspaceRoot}",
         }

@@ -9,12 +9,12 @@ To change the colors of the default theme you need to add a `theme.ron` file tha
 
 The file uses the [Ron format](https://github.com/ron-rs/ron) and is located at one of the following paths, depending on your operating system:
 
-* `$HOME/.config/gitui/theme.ron` (mac)
-* `$XDG_CONFIG_HOME/gitui/theme.ron` (linux using XDG)
-* `$HOME/.config/gitui/theme.ron` (linux)
-* `%APPDATA%/gitui/theme.ron` (Windows)
+* `$HOME/.config/labtui/theme.ron` (mac)
+* `$XDG_CONFIG_HOME/labtui/theme.ron` (linux using XDG)
+* `$HOME/.config/labtui/theme.ron` (linux)
+* `%APPDATA%/labtui/theme.ron` (Windows)
 
-Alternatively, you can create a theme in the same directory mentioned above and use it with the `-t` flag followed by the name of the file in the directory. E.g. If you are on linux calling `gitui -t arc.ron`, this will load the theme in `$XDG_CONFIG_HOME/gitui/arc.ron` or `$HOME/.config/gitui/arc.ron`.
+Alternatively, you can create a theme in the same directory mentioned above and use it with the `-t` flag followed by the name of the file in the directory. E.g. If you are on linux calling `labtui -t arc.ron`, this will load the theme in `$XDG_CONFIG_HOME/labtui/arc.ron` or `$HOME/.config/labtui/arc.ron`.
 
 Example theme override:
 
@@ -32,7 +32,7 @@ Notes:
 * rgb colors might not be supported in every terminal.
 * using a color like `yellow` might appear in whatever your terminal/theme defines for `yellow`
 * valid colors can be found in ratatui's [Color](https://docs.rs/ratatui/latest/ratatui/style/enum.Color.html) struct.
-* all customizable theme elements can be found in [`style.rs` in the `impl Default for Theme` block](https://github.com/gitui-org/gitui/blob/master/src/ui/style.rs#L305)
+* all customizable theme elements can be found in [`style.rs` in the `impl Default for Theme` block](https://github.com/R5FR/labtui/blob/main/src/ui/style.rs#L305)
 
 ## Preset Themes
 

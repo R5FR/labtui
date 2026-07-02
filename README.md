@@ -28,7 +28,7 @@
 
 ## Features
 
-### Git (everything gitui does)
+### Git (full feature set of the upstream tool)
 
 - Keyboard-only control with context-sensitive help panel
 - Stage, unstage, revert and reset — files, hunks, or individual lines

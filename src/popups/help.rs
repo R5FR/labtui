@@ -79,8 +79,8 @@ impl DrawableComponent for HelpPopup {
 			f.render_widget(
 				Paragraph::new(Line::from(vec![Span::styled(
 					Cow::from(format!(
-						"gitui {}",
-						env!("GITUI_BUILD_NAME"),
+						"labtui {}",
+						env!("LABTUI_BUILD_NAME"),
 					)),
 					Style::default(),
 				)]))

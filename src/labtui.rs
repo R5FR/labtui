@@ -22,7 +22,7 @@ use crate::{
 	SPINNER_INTERVAL, TICK_INTERVAL,
 };
 
-pub struct Gitui {
+pub struct Labtui {
 	app: crate::app::App,
 	rx_input: Receiver<InputEvent>,
 	rx_git: Receiver<AsyncGitNotification>,
@@ -32,7 +32,7 @@ pub struct Gitui {
 	rx_watcher: Receiver<()>,
 }
 
-impl Gitui {
+impl Labtui {
 	pub(crate) fn new(
 		cliargs: CliArgs,
 		theme: Theme,
@@ -217,7 +217,7 @@ mod tests {
 	use ratatui::{backend::TestBackend, Terminal};
 
 	use crate::{
-		args::CliArgs, gitui::Gitui, keys::KeyConfig,
+		args::CliArgs, labtui::Labtui, keys::KeyConfig,
 		ui::style::Theme, AsyncNotification, Updater,
 	};
 
@@ -237,7 +237,7 @@ mod tests {
 	}
 
 	#[test]
-	fn gitui_starts() {
+	fn labtui_starts() {
 		apply_common_filters!();
 
 		let (temp_dir, _repo) = repo_init_suffix(Some("-insta"));
@@ -254,38 +254,38 @@ mod tests {
 		let theme = Theme::init(&PathBuf::new());
 		let key_config = KeyConfig::default();
 
-		let mut gitui =
-			Gitui::new(cliargs, theme, &key_config, Updater::Ticker)
+		let mut labtui =
+			Labtui::new(cliargs, theme, &key_config, Updater::Ticker)
 				.unwrap();
 
 		let mut terminal =
 			Terminal::new(TestBackend::new(90, 12)).unwrap();
 
-		gitui.draw(&mut terminal).unwrap();
+		labtui.draw(&mut terminal).unwrap();
 
 		assert_snapshot!("app_loading", terminal.backend());
 
 		let event =
 			AsyncNotification::Git(AsyncGitNotification::Status);
-		gitui.update_async(event);
+		labtui.update_async(event);
 
-		gitui.draw(&mut terminal).unwrap();
+		labtui.draw(&mut terminal).unwrap();
 
 		assert_snapshot!("app_loading_finished", terminal.backend());
 
-		gitui.input_event(KeyCode::Char('2'), KeyModifiers::empty());
-		gitui.input_event(
+		labtui.input_event(KeyCode::Char('2'), KeyModifiers::empty());
+		labtui.input_event(
 			key_config.keys.tab_log.code,
 			key_config.keys.tab_log.modifiers,
 		);
 
-		gitui.wait_for_async_git_notification(
+		labtui.wait_for_async_git_notification(
 			AsyncGitNotification::Log,
 		);
 
-		gitui.update();
+		labtui.update();
 
-		gitui.draw(&mut terminal).unwrap();
+		labtui.draw(&mut terminal).unwrap();
 
 		assert_snapshot!(
 			"app_log_tab_showing_one_commit",

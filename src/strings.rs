@@ -1451,7 +1451,7 @@ pub mod commands {
 				"Quit [{}]",
 				key_config.get_hint(key_config.keys.exit),
 			),
-			"quit gitui application",
+			"quit labtui application",
 			CMD_GROUP_GENERAL,
 		)
 	}

@@ -14,7 +14,7 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 |---|---|---|
 | Remote URL parsing (ssh/https/self-hosted) | ✅ | ✅ |
 | Token resolution (env + OS keyring) | ✅ | ✅ |
-| Async job pattern on gitui threadpool | ✅ | ✅ |
+| Async job pattern on labtui threadpool | ✅ | ✅ |
 | GET / POST / PUT / DELETE helpers | ✅ | — |
 | Automatic pagination (`X-Next-Page`) | ✅ | — |
 | Generic write-action job (`GitLabAction`) | ✅ | partial |
@@ -89,5 +89,5 @@ Legend: ✅ done · 🟡 library only (no UI yet) · ⬜ not started
 
 1. **Assignee / milestone editing** — add member & milestone pickers, then
    wire `assignee_ids` / `milestone_id` updates.
-2. **Syntax highlighting** in the MR diff view (reuse gitui's diff renderer).
+2. **Syntax highlighting** in the MR diff view (reuse labtui's diff renderer).
 3. **Server-side filters** for very large projects.

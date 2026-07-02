@@ -182,7 +182,7 @@ pub fn get_status(
 	} else {
 		let git2_repo = crate::sync::repository::repo(repo_path)?;
 
-		// Calling `untracked_files_config_repo` ensures compatibility with `gitui` <= 0.27.
+		// Calling `untracked_files_config_repo` ensures compatibility with the pre-fork behavior (<= 0.27).
 		// `untracked_files_config_repo` defaults to `All` while both `libgit2` and `gix` default to
 		// `Normal`. According to [show-untracked-files], `normal` is the default value that `git`
 		// chooses.

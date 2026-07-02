@@ -1,12 +1,12 @@
 //!
-//! The gitui program is a text-based UI for working with a Git repository.
+//! The labtui program is a text-based UI for working with a Git repository.
 //! The main navigation occurs between a number of tabs.
 //! When you execute commands, the program may use popups to communicate
 //! with the user. It is possible to customize the keybindings.
 //!
 //!
 //! ## Internal Modules
-//! The top-level modules of gitui can be grouped as follows:
+//! The top-level modules of labtui can be grouped as follows:
 //!
 //! - User Interface
 //!   - [tabs] for main navigation
@@ -22,7 +22,7 @@
 //!   - Usage guides
 //!
 //! ## Included Crates
-//! Some crates are part of the gitui repository:
+//! Some crates are part of the labtui repository:
 //! - [asyncgit] for Git operations in the background.
 //!   - git2-hooks (used by asyncgit).
 //!     - git2-testing (used by git2-hooks).
@@ -65,7 +65,7 @@ mod bug_report;
 mod clipboard;
 mod cmdbar;
 mod components;
-mod gitui;
+mod labtui;
 mod input;
 mod keys;
 mod notify_mutex;
@@ -97,7 +97,7 @@ use crossterm::{
 	},
 	ExecutableCommand,
 };
-use gitui::Gitui;
+use labtui::Labtui;
 use input::InputEvent;
 use keys::KeyConfig;
 use ratatui::backend::CrosstermBackend;
@@ -231,11 +231,11 @@ fn run_app(
 	updater: Updater,
 	terminal: &mut Terminal,
 ) -> Result<QuitState, anyhow::Error> {
-	let mut gitui = Gitui::new(cliargs, theme, key_config, updater)?;
+	let mut labtui = Labtui::new(cliargs, theme, key_config, updater)?;
 
 	log::trace!("app start: {} ms", app_start.elapsed().as_millis());
 
-	gitui.run_main_loop(terminal)
+	labtui.run_main_loop(terminal)
 }
 
 fn setup_terminal() -> Result<()> {
@@ -345,7 +345,7 @@ fn start_terminal(
 
 	let mut backend = CrosstermBackend::new(buf);
 	backend.execute(crossterm::terminal::SetTitle(format!(
-		"gitui ({})",
+		"labtui ({})",
 		path.display()
 	)))?;
 
@@ -360,7 +360,7 @@ fn set_panic_handler() -> Result<()> {
 	panic::set_hook(Box::new(|e| {
 		let backtrace = Backtrace::new();
 		shutdown_terminal();
-		log_eprintln!("\nGitUI was closed due to an unexpected panic.\nPlease file an issue on https://github.com/gitui-org/gitui/issues with the following info:\n\n{e}\n\ntrace:\n{backtrace:?}");
+		log_eprintln!("\nlabtui was closed due to an unexpected panic.\nPlease file an issue on https://github.com/R5FR/labtui/issues with the following info:\n\n{e}\n\ntrace:\n{backtrace:?}");
 	}));
 
 	// global threadpool

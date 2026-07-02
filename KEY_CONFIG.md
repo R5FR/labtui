@@ -21,12 +21,12 @@ Create a `key_bindings.ron` file like this:
 
 The config file format based on the [Ron file format](https://github.com/ron-rs/ron).
 The location of the file depends on your OS:
-* `$HOME/.config/gitui/key_bindings.ron` (mac)
-* `$XDG_CONFIG_HOME/gitui/key_bindings.ron` (linux using XDG)
-* `$HOME/.config/gitui/key_bindings.ron` (linux)
-* `%APPDATA%/gitui/key_bindings.ron` (Windows)
+* `$HOME/.config/labtui/key_bindings.ron` (mac)
+* `$XDG_CONFIG_HOME/labtui/key_bindings.ron` (linux using XDG)
+* `$HOME/.config/labtui/key_bindings.ron` (linux)
+* `%APPDATA%/labtui/key_bindings.ron` (Windows)
 
-See all possible keys to overwrite in gitui: [here](https://github.com/gitui-org/gitui/blob/master/src/keys/key_list.rs#L83)
+See all possible keys to overwrite in labtui: [here](https://github.com/R5FR/labtui/blob/main/src/keys/key_list.rs#L83)
 
 Possible values for:
 * `code` are defined by the type `KeyCode` in crossterm: [here](https://docs.rs/crossterm/latest/crossterm/event/enum.KeyCode.html)
@@ -36,7 +36,7 @@ Here is a [vim style key config](vim_style_key_config.ron) with `h`, `j`, `k`, `
 
 # Key Symbols
 
-Similar to the above GitUI allows you to change the way the UI visualizes key combos containing special keys like `enter`(default: `⏎`) and `shift`(default: `⇧`).
+Similar to the above labtui allows you to change the way the UI visualizes key combos containing special keys like `enter`(default: `⏎`) and `shift`(default: `⇧`).
 
 If we can find a file `key_symbols.ron` in the above folders we apply the overwrites in it.
 
@@ -48,4 +48,4 @@ Example content of this file looks like:
     shift: Some("shift-")
 )
 ```
-This example will only overwrite two symbols. Find all possible symbols to overwrite in `symbols.rs` in the type `KeySymbolsFile` ([src/keys/symbols.rs](https://github.com/gitui-org/gitui/blob/master/src/keys/symbols.rs))
+This example will only overwrite two symbols. Find all possible symbols to overwrite in `symbols.rs` in the type `KeySymbolsFile` ([src/keys/symbols.rs](https://github.com/R5FR/labtui/blob/main/src/keys/symbols.rs))

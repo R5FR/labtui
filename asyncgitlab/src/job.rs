@@ -1,4 +1,4 @@
-//! `AsyncJob` implementations so GitLab requests run on gitui's threadpool and
+//! `AsyncJob` implementations so GitLab requests run on labtui's threadpool and
 //! report completion over the same notification channel mechanism as git tasks.
 //!
 //! Pattern mirrors `asyncgit::AsyncFetchJob`: the job keeps its state behind an

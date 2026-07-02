@@ -105,11 +105,11 @@ pub fn process_cmdline() -> Result<CliArgs> {
 fn app() -> ClapApp {
 	ClapApp::new(crate_name!())
 		.author(crate_authors!())
-		.version(env!("GITUI_BUILD_NAME"))
+		.version(env!("LABTUI_BUILD_NAME"))
 		.about(crate_description!())
 		.help_template(
 			"\
-{before-help}gitui {version}
+{before-help}labtui {version}
 {author}
 {about}
 
@@ -157,7 +157,7 @@ fn app() -> ClapApp {
             .value_name("LOG_FILE"))
 		.arg(
 			Arg::new(WATCHER_FLAG_ID)
-				.help("Use notify-based file system watcher instead of tick-based update. This is more performant, but can cause issues on some platforms. See https://github.com/gitui-org/gitui/blob/master/FAQ.md#watcher for details.")
+				.help("Use notify-based file system watcher instead of tick-based update. This is more performant, but can cause issues on some platforms. See https://github.com/R5FR/labtui/blob/main/FAQ.md#watcher for details.")
 				.long("watcher")
 				.action(clap::ArgAction::SetTrue),
 		)
@@ -197,7 +197,7 @@ fn setup_logging(path_override: Option<PathBuf>) -> Result<()> {
 		path
 	} else {
 		let mut path = get_app_cache_path()?;
-		path.push("gitui.log");
+		path.push("labtui.log");
 		path
 	};
 

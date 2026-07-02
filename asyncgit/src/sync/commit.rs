@@ -56,7 +56,7 @@ pub fn amend(
 
 /// Wrap `Repository::signature` to allow unknown user.name.
 ///
-/// See <https://github.com/gitui-org/gitui/issues/79>.
+/// See upstream issue #79.
 pub(crate) fn signature_allow_undefined_name(
 	repo: &Repository,
 ) -> std::result::Result<Signature<'_>, git2::Error> {
