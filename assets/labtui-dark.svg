@@ -3,8 +3,8 @@
 
 <svg
    width="210mm"
-   height="297mm"
-   viewBox="0 0 210 297"
+   height="61mm"
+   viewBox="0 0 210 61"
    version="1.1"
    id="svg1"
    inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
@@ -25,8 +25,8 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="1.0048822"
-     inkscape:cx="340.83599"
-     inkscape:cy="455.77484"
+     inkscape:cx="340.83597"
+     inkscape:cy="455.77482"
      inkscape:window-width="2560"
      inkscape:window-height="1339"
      inkscape:window-x="0"
@@ -43,7 +43,7 @@
          offset="0"
          id="stop14" />
       <stop
-         style="stop-color:#000000;stop-opacity:1;"
+         style="stop-color:#ffffff;stop-opacity:1;"
          offset="1"
          id="stop15" />
     </linearGradient>
@@ -61,24 +61,24 @@
     </linearGradient>
     <rect
        x="26.868822"
-       y="204.00402"
+       y="204.00401"
        width="225.89714"
        height="222.91171"
        id="rect4" />
     <rect
        x="40.800804"
        y="217.936"
-       width="470.70196"
-       height="398.05662"
+       width="470.70197"
+       height="398.05661"
        id="rect3" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#linearGradient12"
        id="linearGradient11"
        x1="37.045227"
-       y1="279.12392"
-       x2="146.20011"
-       y2="279.12392"
+       y1="279.12393"
+       x2="146.2001"
+       y2="279.12393"
        gradientUnits="userSpaceOnUse" />
     <linearGradient
        inkscape:collect="always"
@@ -88,7 +88,8 @@
        y1="58.978722"
        x2="195.36702"
        y2="107.42553"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(3.9494679,-54.502657)" />
   </defs>
   <g
      inkscape:label="Calque 1"
@@ -96,34 +97,34 @@
      id="layer1">
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:25.4px;font-family:'Faqro Extended Expand Trial';-inkscape-font-specification:'Faqro Extended Expand Trial';writing-mode:lr-tb;direction:ltr;fill:url(#linearGradient15);stroke-width:0.264583;fill-opacity:1"
-       x="71.880318"
-       y="76.88298"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:25.4px;font-family:'Faqro Extended Expand Trial';-inkscape-font-specification:'Faqro Extended Expand Trial';writing-mode:lr-tb;direction:ltr;fill:url(#linearGradient15);fill-opacity:1;stroke-width:0.264583"
+       x="75.829788"
+       y="22.380323"
        id="text1"><tspan
          sodipodi:role="line"
          id="tspan1"
          style="fill:url(#linearGradient15);fill-opacity:1;stroke-width:0.264583"
-         x="71.880318"
-         y="76.88298">lab</tspan><tspan
+         x="75.829788"
+         y="22.380323">lab</tspan><tspan
          sodipodi:role="line"
          style="letter-spacing:15.0813px;fill:url(#linearGradient15);fill-opacity:1;stroke-width:0.264583"
-         x="71.880318"
-         y="108.63298"
+         x="75.829788"
+         y="54.130322"
          id="tspan2">tui</tspan></text>
     <text
        xml:space="preserve"
-       transform="scale(0.26458333)"
+       transform="matrix(0.26458333,0,0,0.26458333,3.9494679,-54.502657)"
        id="text3"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:96px;font-family:'Faqro Extended Expand Trial';-inkscape-font-specification:'Faqro Extended Expand Trial';letter-spacing:57px;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect3);fill:#000000;fill-opacity:1" />
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:96px;font-family:'Faqro Extended Expand Trial';-inkscape-font-specification:'Faqro Extended Expand Trial';letter-spacing:57px;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect3);display:inline;fill:#000000;fill-opacity:1" />
     <text
        xml:space="preserve"
-       transform="matrix(1.5612145,0,0,1.7015512,-39.818457,-306.82029)"
+       transform="matrix(1.5612145,0,0,1.7015512,-35.868989,-361.32295)"
        id="text4"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:35.7478px;font-family:'TeX Gyre Cursor';-inkscape-font-specification:'TeX Gyre Cursor';letter-spacing:-1.58089px;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect4);fill:#000000;fill-opacity:1"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:35.7478px;font-family:'TeX Gyre Cursor';-inkscape-font-specification:'TeX Gyre Cursor';letter-spacing:-1.58089px;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect4);display:inline;fill:#ffffff;fill-opacity:1"><tspan
          x="26.869141"
          y="237.57109"
-         id="tspan5"><tspan
+         id="tspan6"><tspan
            style="font-family:'FiraCode Nerd Font';-inkscape-font-specification:'FiraCode Nerd Font'"
-           id="tspan3">&gt;_</tspan></tspan></text>
+           id="tspan4">&gt;_</tspan></tspan></text>
   </g>
 </svg>

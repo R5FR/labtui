@@ -18,7 +18,7 @@ Stage hunks, ship merge requests, and watch CI go green — without ever leaving
 
 <div align="center">
 
-<video src="assets/labtui-promo.mp4" poster="assets/labtui-promo-poster.jpg" controls muted width="820">
+<video src="https://github.com/user-attachments/assets/3109c1ab-306f-4b1a-a791-aba1e14a6d40" controls muted width="820">
   Your browser can't play this video — grab it directly: <a href="assets/labtui-promo.mp4">assets/labtui-promo.mp4</a>
 </video>
 
