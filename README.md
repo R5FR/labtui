@@ -29,7 +29,7 @@ Stage hunks, ship merge requests, and watch CI go green — without ever leaving
 <br/>
 
 > [!NOTE]
-> **labtui is a fork**, rebuilt around a single idea: your GitLab workflow shouldn't require a browser tab. Everything below is native, keyboard-driven, and async — the UI never blocks on the network.
+> **labtui is a fork of [gitui](https://github.com/gitui-org/gitui)**, rebuilt around a single idea: your GitLab workflow shouldn't require a browser tab. Everything below is native, keyboard-driven, and async — the UI never blocks on the network.
 
 ---
 
@@ -230,4 +230,4 @@ See [`asyncgitlab/ROADMAP.md`](asyncgitlab/ROADMAP.md) for the complete coverage
 
 ## License
 
-[MIT](LICENSE.md) — labtui is a fork, built on the shoulders of the project it started from.
+[MIT](LICENSE.md) — labtui is a fork of [gitui](https://github.com/gitui-org/gitui), built on the shoulders of the project it started from.
