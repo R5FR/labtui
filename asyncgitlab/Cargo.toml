@@ -2,15 +2,15 @@
 name = "asyncgitlab"
 version = "0.1.0"
 edition = "2021"
-description = "Async GitLab API layer for labtui (gitui fork)"
+description = "Async GitLab API layer for labtui"
 license = "MIT"
-repository = "https://github.com/tomleptl/labtui"
+repository = "https://github.com/R5FR/labtui"
 readme = "README.md"
 keywords = ["gitlab", "tui", "git", "async", "api"]
 categories = ["command-line-utilities", "api-bindings"]
 
 [dependencies]
-# only used for the `AsyncJob` trait so GitLab tasks plug into gitui's
+# only used for the `AsyncJob` trait so GitLab tasks plug into labtui's
 # threadpool exactly like git tasks. default-features=false avoids vendor-openssl.
 asyncgit = { package = "labtui-asyncgit", version = "0.28.1", path = "../asyncgit", default-features = false }
 log = "0.4"

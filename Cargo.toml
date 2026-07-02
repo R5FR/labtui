@@ -5,12 +5,12 @@ authors = [
   "tomleptl",
   "extrawurst <mail@rusticorn.com>",
 ]
-description = "blazing fast terminal-ui for git and GitLab (gitui fork)"
+description = "blazing fast terminal-ui for git and GitLab"
 edition = "2021"
 rust-version = "1.88"
 exclude = [".github/*", ".vscode/*", "assets/*"]
-homepage = "https://github.com/tomleptl/labtui"
-repository = "https://github.com/tomleptl/labtui"
+homepage = "https://github.com/R5FR/labtui"
+repository = "https://github.com/R5FR/labtui"
 readme = "README.md"
 license = "MIT"
 categories = ["command-line-utilities"]
