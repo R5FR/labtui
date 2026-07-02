@@ -57,7 +57,7 @@ ratatui = { version = "0.30", default-features = false, features = [
   "crossterm",
   "serde",
 ] }
-ratatui-textarea = "0.8"
+ratatui-textarea = "0.9"
 rayon-core = "1.13"
 ron = "0.12"
 scopeguard = "1.2"
