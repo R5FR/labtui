@@ -1,0 +1,20 @@
+# Build artifacts
+/target/
+/release/
+
+# Profiling
+flamegraph.svg
+perf.data
+perf.data.old
+
+# Rust
+**/*.rs.bk
+
+# macOS
+**/.DS_Store
+
+# JetBrains IDE
+/.idea/
+
+.gitignore
+.claude/

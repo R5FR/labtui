@@ -1,0 +1,12 @@
+[package]
+name = "invalidstring"
+version = "0.1.3"
+authors = ["extrawurst <mail@rusticorn.com>"]
+edition = "2021"
+description = "just for testing invalid string data"
+homepage = "https://github.com/R5FR/labtui"
+repository = "https://github.com/R5FR/labtui"
+readme = "README.md"
+license = "MIT"
+categories = ["development-tools", "development-tools::testing", "encoding"]
+keywords = ["string"]
