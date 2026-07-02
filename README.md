@@ -1,64 +1,103 @@
-<p align="center">
-  <img src="assets/labtui-dark.svg#gh-dark-mode-only" width="260" alt="labtui logo" />
-  <img src="assets/labtui-light.svg#gh-light-mode-only" width="260" alt="labtui logo" />
-</p>
+<div align="center">
 
-<p align="center">
-  <strong>A blazing-fast terminal UI for Git and GitLab</strong><br/>
-  Fork of <a href="https://github.com/gitui-org/gitui">gitui</a> — with a native Merge Requests, Issues and CI/CD tab built in
-</p>
+<img src="assets/labtui-dark.svg#gh-dark-mode-only" width="280" alt="labtui" />
+<img src="assets/labtui-light.svg#gh-light-mode-only" width="280" alt="labtui" />
 
-<p align="center">
-  <img src="https://img.shields.io/badge/rust-1.88%2B-orange?logo=rust" />
-  <img src="https://img.shields.io/badge/license-MIT-blue" />
-  <img src="https://img.shields.io/badge/status-active-brightgreen" />
-</p>
+### The terminal cockpit for Git and GitLab
+
+Stage hunks, ship merge requests, and watch CI go green — without ever leaving the keyboard.
+
+[![rust](https://img.shields.io/badge/rust-1.88%2B-ff4c00?logo=rust&logoColor=white&labelColor=0d0d0d)](https://www.rust-lang.org)
+[![license](https://img.shields.io/badge/license-MIT-ff4c00?labelColor=0d0d0d)](LICENSE.md)
+[![status](https://img.shields.io/badge/status-active-ff4c00?labelColor=0d0d0d)](https://github.com/R5FR/labtui)
+[![gitlab](https://img.shields.io/badge/GitLab-native-ff4c00?logo=gitlab&logoColor=white&labelColor=0d0d0d)](#gitlab-setup)
+
+</div>
+
+<br/>
+
+<div align="center">
+
+<video src="assets/labtui-promo.mp4" poster="assets/labtui-promo-poster.jpg" controls muted width="820">
+  Your browser can't play this video — grab it directly: <a href="assets/labtui-promo.mp4">assets/labtui-promo.mp4</a>
+</video>
+
+<sub>▶ full walkthrough — Git, Merge Requests, Issues &amp; boards, CI/CD</sub>
+
+</div>
+
+<br/>
+
+> [!NOTE]
+> **labtui is a fork**, rebuilt around a single idea: your GitLab workflow shouldn't require a browser tab. Everything below is native, keyboard-driven, and async — the UI never blocks on the network.
 
 ---
 
-## What is labtui?
+## Contents
 
-**labtui** is a keyboard-driven terminal UI that combines full Git workflow support with deep GitLab integration. It lets you review and act on Merge Requests, browse Issues, monitor CI pipelines, and read job logs — all without leaving your terminal or opening a browser.
+- [Why labtui](#why-labtui)
+- [Features](#features)
+- [Install](#install)
+- [GitLab setup](#gitlab-setup)
+- [Usage](#usage)
+- [Key bindings](#key-bindings)
+- [Color themes](#color-themes)
+- [GitLab coverage](#gitlab-coverage)
+- [License](#license)
 
-<p align="center">
-  <img src="demo.gif" alt="labtui demo" width="720" />
-</p>
+---
+
+## Why labtui
+
+Most Git TUIs stop at `git status`. labtui keeps going: merge requests, issue boards, and pipeline logs render right next to your diff, in the same keystroke-driven interface, with the same async engine so nothing ever freezes waiting on a network call.
+
+| | |
+|---|---|
+| **Keyboard-only** | Every action — stage, merge, approve, retry a pipeline — is one keypress away |
+| **Async core** | Git and GitLab calls run off the main thread; the UI never blocks |
+| **Zero config** | GitLab tabs appear automatically the moment a GitLab remote is detected |
+| **No plaintext secrets** | Tokens live in the OS keyring, never on disk |
 
 ---
 
 ## Features
 
-### Git (full feature set of the upstream tool)
+### Git
 
-- Keyboard-only control with context-sensitive help panel
+The complete workflow, keyboard-first:
+
 - Stage, unstage, revert and reset — files, hunks, or individual lines
-- Commit, amend, with full hook support (`pre-commit`, `commit-msg`, `post-commit`, `prepare-commit-msg`)
+- Commit and amend with full hook support (`pre-commit`, `commit-msg`, `post-commit`, `prepare-commit-msg`)
 - Stash — save, pop, apply, drop, inspect
-- Push / Fetch to and from remote
+- Push / fetch to and from remote
 - Branch management — create, rename, delete, checkout, remote tracking
-- Browse and search commit log, diff committed changes
+- Browse and search the commit log, diff committed changes
 - Submodule support
 - GPG commit signing
-- Async git engine — the UI never freezes
+- Async engine — the UI never freezes
 
-### GitLab (labtui additions)
+### GitLab
+
+<div align="center">
 
 | Tab | Key | What you can do |
-|-----|-----|-----------------|
+|:---:|:---:|---|
 | **Merge Requests** | `6` | List MRs with live CI badge · open detail + discussion thread · view diff · merge · approve/unapprove · rebase · close/reopen · comment · edit labels · open in browser |
-| **Issues** | `7` | List issues · board view by label (switch boards with `[`/`]`) · open detail + comment thread · create · close/reopen · comment · edit labels · filter |
-| **CI/CD** | `8` | Browse pipelines → jobs → job trace · retry/cancel pipeline or job · trigger a new pipeline · commits view with per-commit CI status · open in browser |
+| **Issues** | `7` | List issues · board view by label (`[` / `]` to switch boards) · open detail + comment thread · create · close/reopen · comment · edit labels · filter |
+| **CI/CD** | `8` | Browse pipelines → jobs → job trace · retry/cancel pipeline or job · trigger a new pipeline · per-commit CI status · open in browser |
 
-GitLab tabs appear **automatically** when a GitLab remote is detected. No config file needed.
+</div>
+
+GitLab tabs appear **automatically** the moment a GitLab remote is detected — gitlab.com or self-hosted, no config file needed.
 
 ---
 
-## Build
+## Install
 
-**Requirements:**
+**Requirements**
 
-- Rust / Cargo ≥ 1.88 — [Install Rust](https://www.rust-lang.org/tools/install)
-- A C compiler and Perl ≥ 5.12 (only if you need the vendored OpenSSL fallback)
+- Rust / Cargo ≥ 1.88 — [install Rust](https://www.rust-lang.org/tools/install)
+- A C compiler and Perl ≥ 5.12 *(only for the vendored OpenSSL fallback)*
 - Python (invocable as `python`) — to run the full test suite
 
 ```sh
@@ -67,14 +106,13 @@ cargo build --release
 
 The binary is written to `target/release/labtui`.
 
-> **Tip — link errors with OpenSSL?**  
-> Build without the bundled OpenSSL and let Cargo use the system TLS stack (rustls):
->
+> [!TIP]
+> Hitting OpenSSL link errors? Build without the bundled OpenSSL and let Cargo use the system TLS stack (rustls):
 > ```sh
 > cargo build --release --no-default-features
 > ```
 
-### Install (local)
+**Install locally**
 
 ```sh
 cargo install --path . --locked
@@ -84,14 +122,16 @@ cargo install --path . --locked
 
 ## GitLab setup
 
-labtui reads your repo's git remote URL and auto-detects whether it points to a GitLab instance (gitlab.com or self-hosted).
+labtui reads your repo's git remote URL and auto-detects whether it points to a GitLab instance.
 
-On first launch in a GitLab repo, you will be prompted to enter a **Personal Access Token**:
+On first launch inside a GitLab repo you'll be prompted for a **Personal Access Token**:
 
-- `read_api` scope — read-only browsing (MRs, Issues, CI logs)
-- `api` scope — required for write actions (merge, approve, create issue, comment …)
+| Scope | Unlocks |
+|---|---|
+| `read_api` | Read-only browsing — MRs, Issues, CI logs |
+| `api` | Write actions — merge, approve, create issue, comment, retry pipeline |
 
-The token is stored in the **OS keyring** (no plain-text files). You can also pass it via environment variable:
+The token is stored in the **OS keyring** — never a plain-text file. You can also pass it via environment variable:
 
 ```sh
 export GITLAB_TOKEN=your_token
@@ -105,24 +145,25 @@ export GITLAB_TOKEN=your_token
 labtui
 ```
 
-Launch in any git repository. Navigate tabs with `Tab` / `Shift+Tab` or the number keys `1`–`8`.
-
-### Global keys
+Launch inside any git repository. Navigate tabs with `Tab` / `Shift+Tab` or the number keys `1`–`8`.
 
 | Key | Action |
-|-----|--------|
+|---|---|
 | `Tab` / `Shift+Tab` | Next / previous tab |
-| `1`–`5` | Git tabs (Status, Log, Files, Stash, Branches) |
-| `6` | Merge Requests tab |
-| `7` | Issues tab |
-| `8` | CI/CD tab |
+| `1`–`5` | Git tabs — Status, Log, Files, Stash, Branches |
+| `6` | Merge Requests |
+| `7` | Issues |
+| `8` | CI/CD |
 | `?` | Toggle context-sensitive help |
 | `q` | Quit |
 
-### Merge Requests (`6`)
+## Key bindings
+
+<details>
+<summary><strong>Merge Requests (<code>6</code>)</strong></summary>
 
 | Key | Action |
-|-----|--------|
+|---|---|
 | `Enter` | Open MR detail + discussion thread |
 | `d` | View the diff / changed files |
 | `m` | Merge |
@@ -135,10 +176,13 @@ Launch in any git repository. Navigate tabs with `Tab` / `Shift+Tab` or the numb
 | `f` | Filter (title, branch, author, label) |
 | `r` | Refresh |
 
-### Issues (`7`)
+</details>
+
+<details>
+<summary><strong>Issues (<code>7</code>)</strong></summary>
 
 | Key | Action |
-|-----|--------|
+|---|---|
 | `Enter` | Open issue detail + discussion thread |
 | `n` (list) | Create a new issue |
 | `c` | Close / reopen |
@@ -150,10 +194,13 @@ Launch in any git repository. Navigate tabs with `Tab` / `Shift+Tab` or the numb
 | `f` | Filter |
 | `r` | Refresh |
 
-### CI/CD (`8`)
+</details>
+
+<details>
+<summary><strong>CI/CD (<code>8</code>)</strong></summary>
 
 | Key | Action |
-|-----|--------|
+|---|---|
 | `Enter` | Drill down — pipelines → jobs → job trace |
 | `Esc` | Go back up one level |
 | `t` | Retry pipeline or job |
@@ -163,15 +210,13 @@ Launch in any git repository. Navigate tabs with `Tab` / `Shift+Tab` or the numb
 | `o` | Open in browser |
 | `r` | Refresh |
 
----
+</details>
 
-## Key Bindings
-
-Key bindings can be customized via a Ron config file. See [KEY_CONFIG.md](KEY_CONFIG.md) for the full reference, including ready-made vim-style bindings.
+All key bindings are customizable via a Ron config file — see [KEY_CONFIG.md](KEY_CONFIG.md) for the full reference, including ready-made vim-style bindings.
 
 ---
 
-## Color Themes
+## Color themes
 
 labtui works on both light and dark terminals and ships with several built-in themes. See [THEMES.md](THEMES.md) for how to switch themes and write your own.
 
@@ -185,6 +230,4 @@ See [`asyncgitlab/ROADMAP.md`](asyncgitlab/ROADMAP.md) for the complete coverage
 
 ## License
 
-MIT — see [LICENSE.md](LICENSE.md).
-
-labtui is a fork of [gitui](https://github.com/gitui-org/gitui) by Stephan Dilly (extrawurst), used under the MIT license.
+[MIT](LICENSE.md) — labtui is a fork, built on the shoulders of the project it started from.
