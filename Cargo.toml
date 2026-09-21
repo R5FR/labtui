@@ -1,6 +1,6 @@
 [package]
 name = "labtui"
-version = "0.28.3"
+version = "0.28.4"
 authors = [
   "tomleptl",
   "extrawurst <mail@rusticorn.com>",
