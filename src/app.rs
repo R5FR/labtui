@@ -46,7 +46,7 @@ use asyncgit::{
 	AsyncGitNotification, PushType,
 };
 use crossbeam_channel::Sender;
-use crossterm::event::{Event, KeyEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
 	layout::{
 		Alignment, Constraint, Direction, Layout, Margin, Rect,
@@ -327,7 +327,7 @@ impl App {
 
 	///
 	pub fn event(&mut self, ev: InputEvent) -> Result<()> {
-		log::trace!("event: {ev:?}");
+		log_event(&ev);
 
 		if let InputEvent::Input(ev) = ev {
 			if self.check_hard_exit(&ev) || self.check_quit(&ev) {
@@ -1294,5 +1294,24 @@ impl App {
 			.alignment(Alignment::Right),
 			text_area,
 		);
+	}
+}
+
+/// Trace an input event without leaking typed text: popups take passwords and
+/// tokens, so printable keys and pastes are never written to the log.
+fn log_event(ev: &InputEvent) {
+	match ev {
+		InputEvent::Input(Event::Key(key))
+			if matches!(key.code, KeyCode::Char(_))
+				&& !key.modifiers.intersects(
+					KeyModifiers::CONTROL | KeyModifiers::ALT,
+				) =>
+		{
+			log::trace!("event: key <redacted> ({:?})", key.kind);
+		}
+		InputEvent::Input(Event::Paste(_)) => {
+			log::trace!("event: paste <redacted>");
+		}
+		_ => log::trace!("event: {ev:?}"),
 	}
 }
