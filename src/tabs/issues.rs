@@ -906,7 +906,7 @@ impl IssuesTab {
 				}
 			}
 			None => {
-				lines.push(Line::styled("(no description)", style))
+				lines.push(Line::styled("(no description)", style));
 			}
 		}
 

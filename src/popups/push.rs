@@ -4,6 +4,7 @@ use crate::{
 		visibility_blocking, CommandBlocking, CommandInfo, Component,
 		CredComponent, DrawableComponent, EventState,
 	},
+	gitlab_cred::fill_with_gitlab_token,
 	keys::{key_match, SharedKeyConfig},
 	queue::{InternalEvent, Queue},
 	strings,
@@ -111,6 +112,11 @@ impl PushPopup {
 				&self.repo.borrow(),
 			)
 			.unwrap_or_else(|_| BasicAuthCredential::new(None, None));
+			let cred = fill_with_gitlab_token(
+				&self.repo.borrow(),
+				&get_default_remote_for_push(&self.repo.borrow())?,
+				cred,
+			);
 			if cred.is_complete() {
 				self.push_to_remote(Some(cred), force)
 			} else {

@@ -65,9 +65,10 @@ mod bug_report;
 mod clipboard;
 mod cmdbar;
 mod components;
-mod labtui;
+mod gitlab_cred;
 mod input;
 mod keys;
+mod labtui;
 mod notify_mutex;
 mod open_browser;
 mod options;
@@ -97,9 +98,9 @@ use crossterm::{
 	},
 	ExecutableCommand,
 };
-use labtui::Labtui;
 use input::InputEvent;
 use keys::KeyConfig;
+use labtui::Labtui;
 use ratatui::backend::CrosstermBackend;
 use scopeguard::defer;
 use std::{
@@ -231,7 +232,8 @@ fn run_app(
 	updater: Updater,
 	terminal: &mut Terminal,
 ) -> Result<QuitState, anyhow::Error> {
-	let mut labtui = Labtui::new(cliargs, theme, key_config, updater)?;
+	let mut labtui =
+		Labtui::new(cliargs, theme, key_config, updater)?;
 
 	log::trace!("app start: {} ms", app_start.elapsed().as_millis());
 

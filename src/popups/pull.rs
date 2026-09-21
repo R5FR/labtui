@@ -4,6 +4,7 @@ use crate::{
 		visibility_blocking, CommandBlocking, CommandInfo, Component,
 		CredComponent, DrawableComponent, EventState,
 	},
+	gitlab_cred::fill_with_gitlab_token,
 	keys::SharedKeyConfig,
 	popups::PushPopup,
 	queue::{Action, InternalEvent, Queue},
@@ -75,6 +76,11 @@ impl PullPopup {
 				&self.repo.borrow(),
 			)
 			.unwrap_or_else(|_| BasicAuthCredential::new(None, None));
+			let cred = fill_with_gitlab_token(
+				&self.repo.borrow(),
+				&get_default_remote_for_fetch(&self.repo.borrow())?,
+				cred,
+			);
 			if cred.is_complete() {
 				self.fetch_from_remote(Some(cred))
 			} else {

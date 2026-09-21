@@ -5,6 +5,7 @@ use crate::components::{
 use crate::{
 	app::Environment,
 	components::ScrollType,
+	gitlab_cred::fill_with_gitlab_token,
 	keys::{key_match, SharedKeyConfig},
 	queue::{Action, InternalEvent, Queue},
 	strings,
@@ -318,6 +319,11 @@ impl TagListPopup {
 			if need_username_password(&self.repo.borrow())? {
 				let credential =
 					extract_username_password(&self.repo.borrow())?;
+				let credential = fill_with_gitlab_token(
+					&self.repo.borrow(),
+					&sync::get_default_remote(&self.repo.borrow())?,
+					credential,
+				);
 
 				if credential.is_complete() {
 					Some(credential)
