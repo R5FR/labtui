@@ -21,9 +21,7 @@ use asyncgitlab::{
 };
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
-	layout::{
-		Alignment, Constraint, Direction, Layout, Rect,
-	},
+	layout::{Alignment, Constraint, Direction, Layout, Rect},
 	text::{Line, Span},
 	widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 	Frame,
@@ -171,9 +169,7 @@ impl IssuesTab {
 
 	/// True when a GitLab remote was detected and a token is available.
 	fn token_available(&self) -> bool {
-		self.remote
-			.as_ref()
-			.is_some_and(|r| has_token(&r.host))
+		self.remote.as_ref().is_some_and(|r| has_token(&r.host))
 	}
 
 	/// Spawn the fetch for the active view if it has not loaded yet.
@@ -324,8 +320,7 @@ impl IssuesTab {
 			return;
 		}
 
-		let Some(host) =
-			self.remote.as_ref().map(|r| r.host.clone())
+		let Some(host) = self.remote.as_ref().map(|r| r.host.clone())
 		else {
 			return;
 		};
@@ -357,7 +352,8 @@ impl IssuesTab {
 
 	/// Spawn a "create issue" action with the typed title.
 	fn submit_new_issue(&mut self) {
-		let title = self.new_issue_input.get_text().trim().to_string();
+		let title =
+			self.new_issue_input.get_text().trim().to_string();
 		self.new_issue_input.clear();
 		self.new_issue_input.hide();
 		if title.is_empty() {
@@ -384,10 +380,7 @@ impl IssuesTab {
 			Some(i) => (i.iid, StateEvent::Close),
 			None => return,
 		};
-		self.spawn_action(GitLabAction::SetIssueState {
-			iid,
-			event,
-		});
+		self.spawn_action(GitLabAction::SetIssueState { iid, event });
 	}
 
 	/// Open the selected issue (or the one in the detail view) in a browser.
@@ -413,8 +406,7 @@ impl IssuesTab {
 			return;
 		}
 		self.status_msg = Some("working…".to_string());
-		self.async_action
-			.spawn(AsyncActionJob::new(remote, action));
+		self.async_action.spawn(AsyncActionJob::new(remote, action));
 	}
 
 	/// The issue actions apply to: the detail's issue, else the selection.
@@ -496,7 +488,10 @@ impl IssuesTab {
 					if let Some(result) = job.result() {
 						self.detail = Some(match result {
 							Ok((issue, notes)) => {
-								Load::Loaded(DetailData { issue, notes })
+								Load::Loaded(DetailData {
+									issue,
+									notes,
+								})
 							}
 							Err(e) => Load::Error(e),
 						});
@@ -548,26 +543,19 @@ impl IssuesTab {
 		}
 		let f = self.filter.to_lowercase();
 		issue.title.to_lowercase().contains(&f)
-			|| issue
-				.author
-				.as_ref()
-				.is_some_and(|a| {
-					a.username.to_lowercase().contains(&f)
-				})
-			|| issue
-				.labels
-				.iter()
-				.any(|l| l.to_lowercase().contains(&f))
+			|| issue.author.as_ref().is_some_and(|a| {
+				a.username.to_lowercase().contains(&f)
+			}) || issue
+			.labels
+			.iter()
+			.any(|l| l.to_lowercase().contains(&f))
 			|| format!("#{}", issue.iid).contains(&f)
 	}
 
 	/// Issues shown in the list view (after applying the filter).
 	fn filtered_issues(&self) -> Vec<&Issue> {
 		self.list_issues().map_or_else(Vec::new, |issues| {
-			issues
-				.iter()
-				.filter(|i| self.matches_filter(i))
-				.collect()
+			issues.iter().filter(|i| self.matches_filter(i)).collect()
 		})
 	}
 
@@ -749,10 +737,10 @@ impl IssuesTab {
 			IssueState::Closed => "✗",
 			_ => "●",
 		};
-		let author = issue
-			.author
-			.as_ref()
-			.map_or_else(String::new, |a| format!(" @{}", a.username));
+		let author =
+			issue.author.as_ref().map_or_else(String::new, |a| {
+				format!(" @{}", a.username)
+			});
 		let comments = if issue.user_notes_count > 0 {
 			format!("  💬{}", issue.user_notes_count)
 		} else {
@@ -817,10 +805,7 @@ impl IssuesTab {
 		};
 		let chunks = Layout::default()
 			.direction(Direction::Vertical)
-			.constraints([
-				Constraint::Length(1),
-				Constraint::Min(1),
-			])
+			.constraints([Constraint::Length(1), Constraint::Min(1)])
 			.split(content);
 		f.render_widget(
 			Paragraph::new(format!("Board: {name}{switch}"))
@@ -855,19 +840,19 @@ impl IssuesTab {
 				.iter()
 				.enumerate()
 				.map(|(ri, issue)| {
-					let selected =
-						active_col && ri == self.board_row;
+					let selected = active_col && ri == self.board_row;
 					ListItem::new(self.issue_line(issue, selected))
 				})
 				.collect();
 
-			let title = format!("{} ({})", col.title, col.issues.len());
-			let block = Block::default()
-				.borders(Borders::ALL)
-				.title(Span::styled(
+			let title =
+				format!("{} ({})", col.title, col.issues.len());
+			let block = Block::default().borders(Borders::ALL).title(
+				Span::styled(
 					title,
 					self.theme.text(true, active_col),
-				));
+				),
+			);
 			f.render_widget(List::new(items).block(block), *area);
 		}
 
@@ -889,10 +874,8 @@ impl IssuesTab {
 			IssueState::Closed => "closed",
 			_ => "open",
 		};
-		let author = issue
-			.author
-			.as_ref()
-			.map_or_else(String::new, |a| {
+		let author =
+			issue.author.as_ref().map_or_else(String::new, |a| {
 				format!("  by @{}", a.username)
 			});
 
@@ -922,8 +905,9 @@ impl IssuesTab {
 					lines.push(Line::styled(l.to_string(), style));
 				}
 			}
-			None => lines
-				.push(Line::styled("(no description)", style)),
+			None => {
+				lines.push(Line::styled("(no description)", style))
+			}
 		}
 
 		let comments: Vec<&Note> =
@@ -962,9 +946,8 @@ impl IssuesTab {
 			"Issue #{}  ·  [esc] back  [n] comment  [l] labels  {close_hint}  [o] open",
 			issue.iid
 		);
-		let block = Block::default()
-			.borders(Borders::ALL)
-			.title(title);
+		let block =
+			Block::default().borders(Borders::ALL).title(title);
 		let p = Paragraph::new(lines)
 			.block(block)
 			.wrap(Wrap { trim: false })
@@ -1024,7 +1007,9 @@ impl DrawableComponent for IssuesTab {
 			Status::Error(e) => self.draw_message(
 				f,
 				rect,
-				&format!("Failed to load:\n{e}\n\nPress [r] to retry."),
+				&format!(
+					"Failed to load:\n{e}\n\nPress [r] to retry."
+				),
 			),
 			Status::Loaded => match self.view {
 				View::List => {
@@ -1408,9 +1393,7 @@ impl IssuesTab {
 }
 
 /// Inspect the default remote and parse it into a GitLab project, if any.
-fn detect_gitlab_remote(
-	repo: &RepoPathRef,
-) -> Option<GitLabRemote> {
+fn detect_gitlab_remote(repo: &RepoPathRef) -> Option<GitLabRemote> {
 	let repo = repo.borrow();
 	let remote_name = get_default_remote(&repo).ok()?;
 	let url = get_remote_url(&repo, &remote_name).ok()??;

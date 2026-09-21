@@ -217,7 +217,7 @@ mod tests {
 	use ratatui::{backend::TestBackend, Terminal};
 
 	use crate::{
-		args::CliArgs, labtui::Labtui, keys::KeyConfig,
+		args::CliArgs, keys::KeyConfig, labtui::Labtui,
 		ui::style::Theme, AsyncNotification, Updater,
 	};
 

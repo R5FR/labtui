@@ -135,8 +135,7 @@ pub struct Environment {
 	pub options: SharedOptions,
 	pub sender_git: Sender<AsyncGitNotification>,
 	pub sender_app: Sender<AsyncAppNotification>,
-	pub sender_gitlab:
-		Sender<asyncgitlab::AsyncGitLabNotification>,
+	pub sender_gitlab: Sender<asyncgitlab::AsyncGitLabNotification>,
 }
 
 /// The need to construct a "whatever" environment only arises in testing right now
@@ -308,7 +307,8 @@ impl App {
 				3 => self.stashing_tab.draw(f, chunks_main[1])?,
 				4 => self.stashlist_tab.draw(f, chunks_main[1])?,
 				5 => {
-					self.merge_requests_tab.draw(f, chunks_main[1])?;
+					self.merge_requests_tab
+						.draw(f, chunks_main[1])?;
 				}
 				6 => {
 					self.issues_tab.draw(f, chunks_main[1])?;

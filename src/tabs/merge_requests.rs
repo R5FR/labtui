@@ -140,9 +140,7 @@ impl MergeRequestsTab {
 	}
 
 	fn token_available(&self) -> bool {
-		self.remote
-			.as_ref()
-			.is_some_and(|r| has_token(&r.host))
+		self.remote.as_ref().is_some_and(|r| has_token(&r.host))
 	}
 
 	fn ensure_load(&mut self) {
@@ -193,8 +191,7 @@ impl MergeRequestsTab {
 		if token.is_empty() {
 			return;
 		}
-		let Some(host) =
-			self.remote.as_ref().map(|r| r.host.clone())
+		let Some(host) = self.remote.as_ref().map(|r| r.host.clone())
 		else {
 			return;
 		};
@@ -225,8 +222,7 @@ impl MergeRequestsTab {
 		self.detail_iid = Some(iid);
 		self.detail_scroll = 0;
 		self.detail = Some(Load::Loading);
-		self.async_detail
-			.spawn(AsyncMrDetailJob::new(remote, iid));
+		self.async_detail.spawn(AsyncMrDetailJob::new(remote, iid));
 	}
 
 	fn close_detail(&mut self) {
@@ -242,8 +238,7 @@ impl MergeRequestsTab {
 			return;
 		};
 		self.detail = Some(Load::Loading);
-		self.async_detail
-			.spawn(AsyncMrDetailJob::new(remote, iid));
+		self.async_detail.spawn(AsyncMrDetailJob::new(remote, iid));
 	}
 
 	const fn detail_open(&self) -> bool {
@@ -305,8 +300,7 @@ impl MergeRequestsTab {
 			return;
 		}
 		self.status_msg = Some("working…".to_string());
-		self.async_action
-			.spawn(AsyncActionJob::new(remote, action));
+		self.async_action.spawn(AsyncActionJob::new(remote, action));
 	}
 
 	/// Close the current MR, or reopen it if closed (no-op when merged).
@@ -314,8 +308,7 @@ impl MergeRequestsTab {
 		let event = match self.current_mr().map(|m| m.state) {
 			Some(MergeRequestState::Closed) => StateEvent::Reopen,
 			Some(
-				MergeRequestState::Opened
-				| MergeRequestState::Locked,
+				MergeRequestState::Opened | MergeRequestState::Locked,
 			) => StateEvent::Close,
 			_ => return,
 		};
@@ -494,13 +487,9 @@ impl MergeRequestsTab {
 		mr.title.to_lowercase().contains(&f)
 			|| mr.source_branch.to_lowercase().contains(&f)
 			|| mr.target_branch.to_lowercase().contains(&f)
-			|| mr
-				.author
-				.as_ref()
-				.is_some_and(|a| {
-					a.username.to_lowercase().contains(&f)
-				})
-			|| mr.labels.iter().any(|l| l.to_lowercase().contains(&f))
+			|| mr.author.as_ref().is_some_and(|a| {
+				a.username.to_lowercase().contains(&f)
+			}) || mr.labels.iter().any(|l| l.to_lowercase().contains(&f))
 			|| format!("!{}", mr.iid).contains(&f)
 	}
 
@@ -648,9 +637,8 @@ impl MergeRequestsTab {
 			"MR !{}  ·  [esc] back  [d] diff  [l] labels  [n] comment  [m] merge  [a]/[u] approve  [b] rebase  [c] close  [o] open",
 			data.mr.iid
 		);
-		let block = Block::default()
-			.borders(Borders::ALL)
-			.title(title);
+		let block =
+			Block::default().borders(Borders::ALL).title(title);
 		f.render_widget(
 			Paragraph::new(lines)
 				.block(block)
@@ -673,21 +661,14 @@ impl MergeRequestsTab {
 			MergeRequestState::Locked => "locked",
 			MergeRequestState::Unknown => "?",
 		};
-		let author = mr
-			.author
-			.as_ref()
-			.map_or_else(String::new, |a| {
+		let author =
+			mr.author.as_ref().map_or_else(String::new, |a| {
 				format!("  by @{}", a.username)
 			});
 
 		let mut lines: Vec<Line> = Vec::new();
 		lines.push(Line::styled(
-			format!(
-				"{} !{}  {}",
-				Self::marker(mr),
-				mr.iid,
-				mr.title
-			),
+			format!("{} !{}  {}", Self::marker(mr), mr.iid, mr.title),
 			header,
 		));
 		lines.push(Line::styled(
@@ -830,7 +811,11 @@ impl MergeRequestsTab {
 		self.draw_footer(f, footer);
 	}
 
-	fn draw_token_gate(&self, f: &mut Frame, rect: Rect) -> Result<()> {
+	fn draw_token_gate(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+	) -> Result<()> {
 		if self.token_input.is_visible() {
 			self.draw_message(
 				f,
@@ -858,7 +843,11 @@ impl MergeRequestsTab {
 	}
 
 	/// draws the diff view when it is open; returns `true` if it took over the frame
-	fn draw_changes_overlay(&self, f: &mut Frame, rect: Rect) -> bool {
+	fn draw_changes_overlay(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+	) -> bool {
 		let Some(changes) = &self.changes else {
 			return false;
 		};
@@ -911,7 +900,11 @@ impl MergeRequestsTab {
 		Ok(true)
 	}
 
-	fn draw_list_view(&self, f: &mut Frame, rect: Rect) -> Result<()> {
+	fn draw_list_view(
+		&self,
+		f: &mut Frame,
+		rect: Rect,
+	) -> Result<()> {
 		match &self.list {
 			Load::Loading => {
 				self.draw_message(f, rect, "Loading merge requests…");
@@ -1180,9 +1173,9 @@ impl MergeRequestsTab {
 			self.open_in_browser();
 		} else if matches!(k.code, KeyCode::Char('m')) {
 			if let Some(iid) = self.action_iid() {
-				self.spawn_action(
-					GitLabAction::MergeMergeRequest { iid },
-				);
+				self.spawn_action(GitLabAction::MergeMergeRequest {
+					iid,
+				});
 			}
 		} else if matches!(k.code, KeyCode::Char('a')) {
 			if let Some(iid) = self.action_iid() {
@@ -1198,9 +1191,9 @@ impl MergeRequestsTab {
 			}
 		} else if matches!(k.code, KeyCode::Char('b')) {
 			if let Some(iid) = self.action_iid() {
-				self.spawn_action(
-					GitLabAction::RebaseMergeRequest { iid },
-				);
+				self.spawn_action(GitLabAction::RebaseMergeRequest {
+					iid,
+				});
 			}
 		} else if matches!(k.code, KeyCode::Char('c')) {
 			self.toggle_state();
@@ -1222,9 +1215,7 @@ const fn ci_marker(status: CiStatus) -> &'static str {
 }
 
 /// Inspect the default remote and parse it into a GitLab project, if any.
-fn detect_gitlab_remote(
-	repo: &RepoPathRef,
-) -> Option<GitLabRemote> {
+fn detect_gitlab_remote(repo: &RepoPathRef) -> Option<GitLabRemote> {
 	let repo = repo.borrow();
 	let remote_name = get_default_remote(&repo).ok()?;
 	let url = get_remote_url(&repo, &remote_name).ok()??;

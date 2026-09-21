@@ -276,8 +276,7 @@ impl AsyncBoardJob {
 					}
 				})
 				.collect();
-			let selected =
-				index.min(boards.len().saturating_sub(1));
+			let selected = index.min(boards.len().saturating_sub(1));
 			let lists = boards
 				.get(selected)
 				.map(|b| b.lists.clone())
@@ -480,9 +479,7 @@ impl AsyncPipelinesJob {
 		}
 	}
 
-	fn fetch(
-		remote: &GitLabRemote,
-	) -> Result<Vec<Pipeline>, Error> {
+	fn fetch(remote: &GitLabRemote) -> Result<Vec<Pipeline>, Error> {
 		let client = GitLabClient::from_env(remote.clone())?;
 		runtime::block_on(client.pipelines(None))
 	}
@@ -514,7 +511,10 @@ impl AsyncJob for AsyncPipelinesJob {
 }
 
 enum PipelineJobsJobState {
-	Request { remote: GitLabRemote, pipeline_id: u64 },
+	Request {
+		remote: GitLabRemote,
+		pipeline_id: u64,
+	},
 	Response(PipelineJobsResult),
 }
 
@@ -731,9 +731,7 @@ impl AsyncCommitsJob {
 		}
 	}
 
-	fn fetch(
-		remote: &GitLabRemote,
-	) -> Result<Vec<Commit>, Error> {
+	fn fetch(remote: &GitLabRemote) -> Result<Vec<Commit>, Error> {
 		let client = GitLabClient::from_env(remote.clone())?;
 		runtime::block_on(client.commits(None))
 	}
@@ -958,9 +956,7 @@ impl GitLabAction {
 				Ok(format!("comment added to !{iid}"))
 			}
 			GitLabAction::SetMergeRequestLabels { iid, labels } => {
-				client
-					.set_merge_request_labels(iid, &labels)
-					.await?;
+				client.set_merge_request_labels(iid, &labels).await?;
 				Ok(format!("!{iid} labels updated"))
 			}
 			GitLabAction::CreatePipeline { git_ref } => {

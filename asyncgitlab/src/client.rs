@@ -56,8 +56,9 @@ impl GitLabClient {
 	/// Build a client from a parsed remote and a token.
 	pub fn new(remote: GitLabRemote, token: &str) -> Result<Self> {
 		let mut headers = HeaderMap::new();
-		let mut auth = HeaderValue::from_str(&format!("Bearer {token}"))
-			.map_err(|_| Error::MissingToken)?;
+		let mut auth =
+			HeaderValue::from_str(&format!("Bearer {token}"))
+				.map_err(|_| Error::MissingToken)?;
 		auth.set_sensitive(true);
 		headers.insert(AUTHORIZATION, auth);
 
@@ -97,7 +98,10 @@ impl GitLabClient {
 		let status = resp.status();
 		if !status.is_success() {
 			let body = resp.text().await.unwrap_or_default();
-			return Err(Error::Api { status: status.as_u16(), body });
+			return Err(Error::Api {
+				status: status.as_u16(),
+				body,
+			});
 		}
 		Ok(resp.json::<T>().await?)
 	}
@@ -107,7 +111,10 @@ impl GitLabClient {
 		let status = resp.status();
 		if !status.is_success() {
 			let body = resp.text().await.unwrap_or_default();
-			return Err(Error::Api { status: status.as_u16(), body });
+			return Err(Error::Api {
+				status: status.as_u16(),
+				body,
+			});
 		}
 		Ok(())
 	}
@@ -159,7 +166,8 @@ impl GitLabClient {
 		url: &str,
 		body: &Value,
 	) -> Result<T> {
-		Self::parse(self.http.post(url).json(body).send().await?).await
+		Self::parse(self.http.post(url).json(body).send().await?)
+			.await
 	}
 
 	async fn put_json<T: serde::de::DeserializeOwned>(
@@ -182,7 +190,9 @@ impl GitLabClient {
 		scope: MergeRequestScope,
 	) -> Result<Vec<MergeRequest>> {
 		let query = match scope {
-			MergeRequestScope::Opened => "/merge_requests?state=opened",
+			MergeRequestScope::Opened => {
+				"/merge_requests?state=opened"
+			}
 			MergeRequestScope::All => "/merge_requests",
 		};
 		self.get_paginated(&self.project_url(query)).await
@@ -193,9 +203,9 @@ impl GitLabClient {
 		&self,
 		iid: u64,
 	) -> Result<MergeRequest> {
-		self.get_json(&self.project_url(&format!(
-			"/merge_requests/{iid}"
-		)))
+		self.get_json(
+			&self.project_url(&format!("/merge_requests/{iid}")),
+		)
 		.await
 	}
 
@@ -221,9 +231,8 @@ impl GitLabClient {
 		iid: u64,
 	) -> Result<MergeRequest> {
 		self.put_json(
-			&self.project_url(&format!(
-				"/merge_requests/{iid}/merge"
-			)),
+			&self
+				.project_url(&format!("/merge_requests/{iid}/merge")),
 			&json!({}),
 		)
 		.await
@@ -276,10 +285,7 @@ impl GitLabClient {
 	}
 
 	/// Trigger a rebase of a merge request onto its target branch.
-	pub async fn rebase_merge_request(
-		&self,
-		iid: u64,
-	) -> Result<()> {
+	pub async fn rebase_merge_request(&self, iid: u64) -> Result<()> {
 		Self::check(
 			self.http
 				.put(self.project_url(&format!(
@@ -309,9 +315,8 @@ impl GitLabClient {
 		body: &str,
 	) -> Result<Note> {
 		self.post_json(
-			&self.project_url(&format!(
-				"/merge_requests/{iid}/notes"
-			)),
+			&self
+				.project_url(&format!("/merge_requests/{iid}/notes")),
 			&json!({ "body": body }),
 		)
 		.await
@@ -322,9 +327,11 @@ impl GitLabClient {
 		&self,
 		iid: u64,
 	) -> Result<MrChanges> {
-		self.get_json(&self.project_url(&format!(
-			"/merge_requests/{iid}/changes"
-		)))
+		self.get_json(
+			&self.project_url(&format!(
+				"/merge_requests/{iid}/changes"
+			)),
+		)
 		.await
 	}
 
@@ -389,10 +396,7 @@ impl GitLabClient {
 	}
 
 	/// Notes (comments) on an issue, oldest first.
-	pub async fn issue_notes(
-		&self,
-		iid: u64,
-	) -> Result<Vec<Note>> {
+	pub async fn issue_notes(&self, iid: u64) -> Result<Vec<Note>> {
 		self.get_paginated(&self.project_url(&format!(
 			"/issues/{iid}/notes?sort=asc&order_by=created_at"
 		)))
@@ -429,10 +433,8 @@ impl GitLabClient {
 
 	/// List repository branches.
 	pub async fn branches(&self) -> Result<Vec<Branch>> {
-		self.get_paginated(&self.project_url(
-			"/repository/branches",
-		))
-		.await
+		self.get_paginated(&self.project_url("/repository/branches"))
+			.await
 	}
 
 	/// List repository tags.
@@ -450,7 +452,9 @@ impl GitLabClient {
 			Some(r) => format!(
 				"/repository/commits?with_stats=false&ref_name={r}"
 			),
-			None => "/repository/commits?with_stats=false".to_string(),
+			None => {
+				"/repository/commits?with_stats=false".to_string()
+			}
 		};
 		self.get_paginated(&self.project_url(&suffix)).await
 	}
@@ -504,21 +508,25 @@ impl GitLabClient {
 		&self,
 		pipeline_id: u64,
 	) -> Result<Vec<Job>> {
-		self.get_paginated(&self.project_url(&format!(
-			"/pipelines/{pipeline_id}/jobs"
-		)))
+		self.get_paginated(
+			&self.project_url(&format!(
+				"/pipelines/{pipeline_id}/jobs"
+			)),
+		)
 		.await
 	}
 
 	/// Raw trace (log) of a job as plain text.
 	pub async fn job_trace(&self, job_id: u64) -> Result<String> {
-		let url =
-			self.project_url(&format!("/jobs/{job_id}/trace"));
+		let url = self.project_url(&format!("/jobs/{job_id}/trace"));
 		let resp = self.http.get(&url).send().await?;
 		let status = resp.status();
 		if !status.is_success() {
 			let body = resp.text().await.unwrap_or_default();
-			return Err(Error::Api { status: status.as_u16(), body });
+			return Err(Error::Api {
+				status: status.as_u16(),
+				body,
+			});
 		}
 		Ok(resp.text().await?)
 	}
@@ -586,9 +594,9 @@ impl GitLabClient {
 		&self,
 		pipeline_id: u64,
 	) -> Result<()> {
-		self.delete(&self.project_url(&format!(
-			"/pipelines/{pipeline_id}"
-		)))
+		self.delete(
+			&self.project_url(&format!("/pipelines/{pipeline_id}")),
+		)
 		.await
 	}
 }

@@ -91,9 +91,7 @@ pub fn tab_stashes(key_config: &SharedKeyConfig) -> String {
 		key_config.get_hint(key_config.keys.tab_stashes)
 	)
 }
-pub fn tab_merge_requests(
-	key_config: &SharedKeyConfig,
-) -> String {
+pub fn tab_merge_requests(key_config: &SharedKeyConfig) -> String {
 	format!(
 		"MRs [{}]",
 		key_config.get_hint(key_config.keys.tab_merge_requests)
@@ -757,7 +755,9 @@ pub mod commands {
 			CMD_GROUP_GITLAB,
 		)
 	}
-	pub fn issue_reopen(_key_config: &SharedKeyConfig) -> CommandText {
+	pub fn issue_reopen(
+		_key_config: &SharedKeyConfig,
+	) -> CommandText {
 		CommandText::new(
 			"Reopen [c]".to_string(),
 			"reopen the selected GitLab issue",

@@ -4,10 +4,14 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-	#[error("remote `{0}` does not look like a GitLab repository URL")]
+	#[error(
+		"remote `{0}` does not look like a GitLab repository URL"
+	)]
 	UnsupportedRemote(String),
 
-	#[error("no GitLab token found (set GITLAB_TOKEN or configure one)")]
+	#[error(
+		"no GitLab token found (set GITLAB_TOKEN or configure one)"
+	)]
 	MissingToken,
 
 	#[error("credential store error: {0}")]

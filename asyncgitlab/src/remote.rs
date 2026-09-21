@@ -90,9 +90,7 @@ fn split_authority(rest: &str) -> Option<(String, String)> {
 
 /// Remove a trailing `:port` from a host authority.
 fn strip_port(host: &str) -> String {
-	host.split_once(':')
-		.map_or(host, |(h, _)| h)
-		.to_string()
+	host.split_once(':').map_or(host, |(h, _)| h).to_string()
 }
 
 /// Trim leading slashes and a trailing `.git`.
@@ -100,7 +98,9 @@ fn normalize_path(path: &str) -> String {
 	path.trim_start_matches('/')
 		.trim_end_matches('/')
 		.strip_suffix(".git")
-		.unwrap_or_else(|| path.trim_start_matches('/').trim_end_matches('/'))
+		.unwrap_or_else(|| {
+			path.trim_start_matches('/').trim_end_matches('/')
+		})
 		.to_string()
 }
 
@@ -128,7 +128,9 @@ mod tests {
 
 	#[test]
 	fn full_ssh_with_port() {
-		let r = parse("ssh://git@gitlab.example.com:2222/group/project.git");
+		let r = parse(
+			"ssh://git@gitlab.example.com:2222/group/project.git",
+		);
 		assert_eq!(r.host, "gitlab.example.com");
 		assert_eq!(r.project_path, "group/project");
 	}
@@ -142,7 +144,8 @@ mod tests {
 
 	#[test]
 	fn https_with_credentials() {
-		let r = parse("https://oauth2:tok@gitlab.com/group/project.git");
+		let r =
+			parse("https://oauth2:tok@gitlab.com/group/project.git");
 		assert_eq!(r.host, "gitlab.com");
 		assert_eq!(r.project_path, "group/project");
 	}
@@ -164,6 +167,8 @@ mod tests {
 	#[test]
 	fn rejects_non_gitlab_garbage() {
 		assert!(GitLabRemote::from_url("not a url").is_err());
-		assert!(GitLabRemote::from_url("https://gitlab.com/").is_err());
+		assert!(
+			GitLabRemote::from_url("https://gitlab.com/").is_err()
+		);
 	}
 }

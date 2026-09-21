@@ -5,7 +5,7 @@ use std::{fs::canonicalize, path::PathBuf, rc::Rc};
 use crate::{args::get_app_config_path, strings::symbol};
 
 use super::{
-	key_list::{LabtuiKeyEvent, KeysList},
+	key_list::{KeysList, LabtuiKeyEvent},
 	symbols::KeySymbols,
 };
 

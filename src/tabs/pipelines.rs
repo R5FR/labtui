@@ -141,9 +141,7 @@ impl PipelinesTab {
 	}
 
 	fn token_available(&self) -> bool {
-		self.remote
-			.as_ref()
-			.is_some_and(|r| has_token(&r.host))
+		self.remote.as_ref().is_some_and(|r| has_token(&r.host))
 	}
 
 	fn ensure_load(&mut self) {
@@ -223,7 +221,8 @@ impl PipelinesTab {
 	}
 
 	fn selected_commit(&self) -> Option<&Commit> {
-		self.commits_slice().and_then(|c| c.get(self.commit_selection))
+		self.commits_slice()
+			.and_then(|c| c.get(self.commit_selection))
 	}
 
 	fn open_statuses(&mut self) {
@@ -276,8 +275,7 @@ impl PipelinesTab {
 		if token.is_empty() {
 			return;
 		}
-		let Some(host) =
-			self.remote.as_ref().map(|r| r.host.clone())
+		let Some(host) = self.remote.as_ref().map(|r| r.host.clone())
 		else {
 			return;
 		};
@@ -323,7 +321,8 @@ impl PipelinesTab {
 	}
 
 	fn selected_pipeline(&self) -> Option<&Pipeline> {
-		self.pipelines_slice().and_then(|p| p.get(self.pl_selection))
+		self.pipelines_slice()
+			.and_then(|p| p.get(self.pl_selection))
 	}
 
 	fn selected_job(&self) -> Option<&Job> {
@@ -340,8 +339,7 @@ impl PipelinesTab {
 		self.jobs_pipeline_id = Some(id);
 		self.job_selection = 0;
 		self.jobs = Some(Load::Loading);
-		self.async_jobs
-			.spawn(AsyncPipelineJobsJob::new(remote, id));
+		self.async_jobs.spawn(AsyncPipelineJobsJob::new(remote, id));
 	}
 
 	fn reload_jobs(&mut self) {
@@ -351,8 +349,7 @@ impl PipelinesTab {
 			return;
 		};
 		self.jobs = Some(Load::Loading);
-		self.async_jobs
-			.spawn(AsyncPipelineJobsJob::new(remote, id));
+		self.async_jobs.spawn(AsyncPipelineJobsJob::new(remote, id));
 	}
 
 	fn open_trace(&mut self) {
@@ -400,14 +397,14 @@ impl PipelinesTab {
 			return;
 		}
 		self.status_msg = Some("working…".to_string());
-		self.async_action
-			.spawn(AsyncActionJob::new(remote, action));
+		self.async_action.spawn(AsyncActionJob::new(remote, action));
 	}
 
 	fn retry_selected(&mut self) {
 		match self.level() {
 			Level::Pipelines => {
-				if let Some(id) = self.selected_pipeline().map(|p| p.id)
+				if let Some(id) =
+					self.selected_pipeline().map(|p| p.id)
 				{
 					self.spawn_action(GitLabAction::RetryPipeline {
 						id,
@@ -426,18 +423,17 @@ impl PipelinesTab {
 	fn cancel_selected(&mut self) {
 		match self.level() {
 			Level::Pipelines => {
-				if let Some(id) = self.selected_pipeline().map(|p| p.id)
+				if let Some(id) =
+					self.selected_pipeline().map(|p| p.id)
 				{
-					self.spawn_action(
-						GitLabAction::CancelPipeline { id },
-					);
+					self.spawn_action(GitLabAction::CancelPipeline {
+						id,
+					});
 				}
 			}
 			Level::Jobs => {
 				if let Some(id) = self.selected_job().map(|j| j.id) {
-					self.spawn_action(GitLabAction::CancelJob {
-						id,
-					});
+					self.spawn_action(GitLabAction::CancelJob { id });
 				}
 			}
 			Level::Trace => {}
@@ -546,7 +542,8 @@ impl PipelinesTab {
 
 	fn clamp_pl(&mut self) {
 		let len = self.pipelines_slice().map_or(0, <[_]>::len);
-		self.pl_selection = self.pl_selection.min(len.saturating_sub(1));
+		self.pl_selection =
+			self.pl_selection.min(len.saturating_sub(1));
 	}
 
 	fn clamp_job(&mut self) {
@@ -657,8 +654,7 @@ impl PipelinesTab {
 			.iter()
 			.enumerate()
 			.map(|(i, p)| {
-				let git_ref =
-					p.r#ref.as_deref().unwrap_or("");
+				let git_ref = p.r#ref.as_deref().unwrap_or("");
 				ListItem::new(Line::from(vec![Span::styled(
 					format!(
 						"{} #{}  {}  {}",
@@ -703,8 +699,7 @@ impl PipelinesTab {
 				)]))
 			})
 			.collect();
-		let pid =
-			self.jobs_pipeline_id.map_or(0, |id| id);
+		let pid = self.jobs_pipeline_id.map_or(0, |id| id);
 		f.render_widget(
 			List::new(items).block(
 				Block::default().borders(Borders::ALL).title(
@@ -723,13 +718,11 @@ impl PipelinesTab {
 		let jid = self.trace_job_id.map_or(0, |id| id);
 		f.render_widget(
 			Paragraph::new(trace)
-				.block(
-					Block::default().borders(Borders::ALL).title(
-						format!(
+				.block(Block::default().borders(Borders::ALL).title(
+					format!(
 							"Job #{jid} trace  ·  [↑/↓] scroll  [esc] back"
 						),
-					),
-				)
+				))
 				.wrap(Wrap { trim: false })
 				.style(self.theme.text(true, false))
 				.scroll((self.trace_scroll, 0)),
@@ -756,10 +749,7 @@ impl PipelinesTab {
 				};
 				ListItem::new(Line::from(vec![Span::styled(
 					format!("{short}  {}", c.title),
-					self.theme.text(
-						true,
-						i == self.commit_selection,
-					),
+					self.theme.text(true, i == self.commit_selection),
 				)]))
 			})
 			.collect();
@@ -805,9 +795,9 @@ impl PipelinesTab {
 		f.render_widget(
 			Paragraph::new(lines)
 				.block(
-					Block::default().borders(Borders::ALL).title(
-						"Commit statuses  ·  [esc] back",
-					),
+					Block::default()
+						.borders(Borders::ALL)
+						.title("Commit statuses  ·  [esc] back"),
 				)
 				.wrap(Wrap { trim: false }),
 			area,
@@ -945,11 +935,7 @@ impl DrawableComponent for PipelinesTab {
 			},
 			Level::Pipelines => match &self.pipelines {
 				Load::Loading => {
-					self.draw_message(
-						f,
-						rect,
-						"Loading pipelines…",
-					);
+					self.draw_message(f, rect, "Loading pipelines…");
 				}
 				Load::Error(e) => self.draw_message(
 					f,
@@ -1156,7 +1142,8 @@ impl PipelinesTab {
 			self.cancel_selected();
 		} else if matches!(k.code, KeyCode::Char('o')) {
 			self.open_in_browser();
-		} else if matches!(k.code, KeyCode::Char('r')) && !token_missing
+		} else if matches!(k.code, KeyCode::Char('r'))
+			&& !token_missing
 		{
 			self.reload();
 		} else {
@@ -1207,9 +1194,7 @@ impl PipelinesTab {
 }
 
 /// Inspect the default remote and parse it into a GitLab project, if any.
-fn detect_gitlab_remote(
-	repo: &RepoPathRef,
-) -> Option<GitLabRemote> {
+fn detect_gitlab_remote(repo: &RepoPathRef) -> Option<GitLabRemote> {
 	let repo = repo.borrow();
 	let remote_name = get_default_remote(&repo).ok()?;
 	let url = get_remote_url(&repo, &remote_name).ok()??;

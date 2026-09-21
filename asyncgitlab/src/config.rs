@@ -20,7 +20,13 @@ const KEYRING_SERVICE: &str = "labtui";
 fn host_env_var(host: &str) -> String {
 	let suffix: String = host
 		.chars()
-		.map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' })
+		.map(|c| {
+			if c.is_ascii_alphanumeric() {
+				c.to_ascii_uppercase()
+			} else {
+				'_'
+			}
+		})
 		.collect();
 	format!("{TOKEN_ENV}_{suffix}")
 }
@@ -93,7 +99,10 @@ mod tests {
 
 	#[test]
 	fn host_var_naming() {
-		assert_eq!(host_env_var("gitlab.com"), "GITLAB_TOKEN_GITLAB_COM");
+		assert_eq!(
+			host_env_var("gitlab.com"),
+			"GITLAB_TOKEN_GITLAB_COM"
+		);
 		assert_eq!(
 			host_env_var("gitlab.example.com"),
 			"GITLAB_TOKEN_GITLAB_EXAMPLE_COM"

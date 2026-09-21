@@ -45,10 +45,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	println!("{} open merge request(s):", mrs.len());
 	for mr in mrs {
 		let draft = if mr.draft { " [draft]" } else { "" };
-		let author = mr
-			.author
-			.as_ref()
-			.map_or_else(String::new, |a| format!(" @{}", a.username));
+		let author =
+			mr.author.as_ref().map_or_else(String::new, |a| {
+				format!(" @{}", a.username)
+			});
 		println!(
 			"  !{:<5} {:?}{draft} {} ({} → {}){author}",
 			mr.iid,
